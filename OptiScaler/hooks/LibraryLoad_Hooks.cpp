@@ -32,6 +32,7 @@
 #include <fsr4/FSR4Upgrade.h>
 #include <misc/IdentifyGpu.h>
 #include <low_latency/input/input_uell.h>
+#include <framegen/dlssg/AdaMFGUnlock.h>
 
 // #define LOG_LIB_OPERATIONS
 
@@ -125,8 +126,25 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
             {
                 State::Instance().NGX_OTA_Dlssd = wstring_to_string(lpLibFullPath);
             }
+
+            if (normalizedPath.contains(L"\\dlssg\\"))
+            {
+                if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+                    AdaMFGUnlock::Manager::PatchNvngxDlssg(loadedBin);
+            }
         }
         return loadedBin;
+    }
+
+    // Direct nvngx_dlssg.dll load
+    if (normalizedPath.contains(L"nvngx_dlssg"))
+    {
+        auto dlssgModule = NtdllProxy::LoadLibraryExW_Ldr(lpLibFullPath, NULL, 0);
+        if (dlssgModule != nullptr && Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        {
+            AdaMFGUnlock::Manager::PatchNvngxDlssg(dlssgModule);
+        }
+        return dlssgModule;
     }
 
     // NvApi64.dll
@@ -186,6 +204,9 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
 
         if (dlssgModule != nullptr)
         {
+            if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+                AdaMFGUnlock::Manager::PatchDlssgPlugin(dlssgModule);
+
             const bool localDlssg = pathInsideLocalSlPath && State::Instance().activeFgOutput == FGOutput::DLSSG;
 
             if (!localDlssg && dlssgModule != State::Instance().optiSlDLSSG)

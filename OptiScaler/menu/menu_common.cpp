@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "menu_common.h"
 
 #include "input/input_system.h"
@@ -3189,9 +3189,9 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
 
     outputOptions = {
         { FGOutput::NoFG, "None" },
-        { FGOutput::FSRFG, "FSR FG", "FSR3/4-FG, RDNA4 autoupgrades to FSR4-FG\n\nFSR4-FG sometimes better/worse than XeFG" },
-        { FGOutput::DLSSG, "DLSSG", "DLSSG output\nCan be used in conjuction with Nukem's for example" },
-        { FGOutput::XeFG, "XeFG", "XeFG - heaviest, but best universal FG\n\nXeFG 3 overall deals best with HUD\n\nEnable UI Composition if HUD ghosting" },
+        { FGOutput::FSRFG, "AMD FSR FG", "FSR3/4-FG, RDNA4 autoupgrades to FSR4-FG\n\nFSR4-FG sometimes better/worse than XeFG" },
+        { FGOutput::DLSSG, "NVIDIA Ada MFG", "Native NVIDIA DLSS Multi-Frame Generation (2X/3X/4X/6X) for RTX 40/50 using Tensor Cores" },
+        { FGOutput::XeFG, "Intel XeFG", "XeFG - heaviest, but best universal FG\n\nXeFG 3 overall deals best with HUD\n\nEnable UI Composition if HUD ghosting" },
     };
 
     // clang-format on
@@ -3357,12 +3357,8 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
         if (!supportsDlssg && (replaceFgOutputWithNvngx || showNvngxFgDowndown) &&
             config->FGNvngxReplacement.value_or_default() == FGNvngxReplacement::None)
         {
-            if (state.nukemsFgFileAvailable)
-                config->FGNvngxReplacement.set_volatile_value(FGNvngxReplacement::Nukems);
-
-            else if (state.artursFgFileAvailable)
-                config->FGNvngxReplacement.set_volatile_value(FGNvngxReplacement::Arturs);
-
+            if (config->FGDLSSGUnlockAdaMFG.value_or_default())
+                config->FGNvngxReplacement.set_volatile_value(FGNvngxReplacement::None);
             else if (FfxApiProxy::IsFGReady(false))
                 config->FGNvngxReplacement.set_volatile_value(FGNvngxReplacement::FFX);
         }
@@ -3435,6 +3431,19 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
         }
 
         ImGui::EndDisabled();
+
+        if (state.activeFgOutput == FGOutput::DLSSG || state.activeFgInput == FGInput::DLSSG || state.streamlineVersion.major > 0)
+        {
+            if (bool unlockAda = config->FGDLSSGUnlockAdaMFG.value_or_default();
+                ImGui::Checkbox("Unlock Ada MFG (RTX 40)", &unlockAda))
+            {
+                config->FGDLSSGUnlockAdaMFG = unlockAda;
+                AdaMFGUnlock::Manager::SetEnabled(unlockAda);
+                if (unlockAda)
+                    AdaMFGUnlock::Manager::CheckAndPatchAll();
+            }
+            ShowHelpMarker("Unlocks NVIDIA DLSS Multi-Frame Generation (3X, 4X, 6X) on RTX 40 series using Tensor Cores without ReShade");
+        }
 
         if (state.dlssgGameDMFGSupported && !dlssgInputOrOutput)
         {

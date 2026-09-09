@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "DLSSG_Dx12.h"
+#include "AdaMFGUnlock.h"
 
 #include <hudfix/Hudfix_Dx12.h>
 #include <menu/menu_overlay_dx.h>
@@ -120,9 +121,18 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
     if (StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
     {
         _maxInterpolationCount = dlssgState.numFramesToGenerateMax;
-        LOG_INFO("Max supported interpolations: {}", dlssgState.numFramesToGenerateMax);
+        if (AdaMFGUnlock::Manager::IsEnabled() && Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        {
+            AdaMFGUnlock::Manager::CheckAndPatchAll();
+            if (_maxInterpolationCount < 5)
+                _maxInterpolationCount = 5;
+            _supportsDMFG = true;
+        }
 
-        _supportsDMFG = dlssgState.bIsDynamicMFGSupported == sl::Boolean::eTrue;
+        LOG_INFO("Max supported interpolations: {}", _maxInterpolationCount);
+
+        if (!_supportsDMFG)
+            _supportsDMFG = dlssgState.bIsDynamicMFGSupported == sl::Boolean::eTrue;
     }
 
     _gameCommandQueue = cmdQueue;
@@ -229,9 +239,18 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
     if (StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
     {
         _maxInterpolationCount = dlssgState.numFramesToGenerateMax;
-        LOG_INFO("Max supported interpolations: {}", dlssgState.numFramesToGenerateMax);
+        if (AdaMFGUnlock::Manager::IsEnabled() && Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        {
+            AdaMFGUnlock::Manager::CheckAndPatchAll();
+            if (_maxInterpolationCount < 5)
+                _maxInterpolationCount = 5;
+            _supportsDMFG = true;
+        }
 
-        _supportsDMFG = dlssgState.bIsDynamicMFGSupported == sl::Boolean::eTrue;
+        LOG_INFO("Max supported interpolations: {}", _maxInterpolationCount);
+
+        if (!_supportsDMFG)
+            _supportsDMFG = dlssgState.bIsDynamicMFGSupported == sl::Boolean::eTrue;
     }
 
     _gameCommandQueue = cmdQueue;
@@ -334,6 +353,13 @@ bool DLSSG_Dx12::Dispatch()
     }
 
     auto& state = State::Instance();
+
+    if (AdaMFGUnlock::Manager::IsEnabled() && Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    {
+        AdaMFGUnlock::Manager::CheckAndPatchAll();
+        if (_maxInterpolationCount < 5)
+            _maxInterpolationCount = 5;
+    }
 
     if (Config::Instance()->FGDLSSGInterpolationCount.value_or_default() > _maxInterpolationCount)
     {

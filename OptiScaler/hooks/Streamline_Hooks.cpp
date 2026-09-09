@@ -12,6 +12,7 @@
 #include <framegen/nvngx/Nvngx_FG.h>
 #include <proxies/KernelBase_Proxy.h>
 #include <imgui/ImGuiNotify.hpp>
+#include <framegen/dlssg/AdaMFGUnlock.h>
 
 #include <json.hpp>
 #include <sl1_reflex.h>
@@ -1153,6 +1154,12 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 
     LOG_TRACE("DLSSG Modified Mode: {}", magic_enum::enum_name(newOptions.mode));
 
+    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    {
+        AdaMFGUnlock::Manager::CheckAndPatchAll();
+        state.dlssgMfgMax = 5;
+    }
+
     if (dlssgPotentiallyActive && state.streamlineVersion >= feature_version { 2, 7, 1 })
     {
         // Populate dlssgMfgMax once
@@ -1235,6 +1242,14 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
     }
 
     auto& optiState = State::Instance();
+
+    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    {
+        AdaMFGUnlock::Manager::CheckAndPatchAll();
+        state.numFramesToGenerateMax = 5;
+        state.bIsDynamicMFGSupported = sl::eTrue;
+        optiState.dlssgGameDMFGSupported = true;
+    }
 
     if (optiState.streamlineVersion >= feature_version { 2, 7, 1 })
     {

@@ -599,6 +599,7 @@ class Config
     CustomOptional<bool> FGXeFGForceBorderless { false };
 
     // DLSSG
+    CustomOptional<bool> FGDLSSGUnlockAdaMFG { true };   // Unlocks Native NVIDIA Ada Multi-Frame Gen (3X/4X/6X)
     CustomOptional<int> FGDLSSGInterpolationCount { 1 }; // For Opti's own SL instance
     CustomOptional<bool> FGDLSSGUseGamesReflexMarkers { true };
     CustomOptional<int, NoDefault>

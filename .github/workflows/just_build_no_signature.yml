@@ -7,10 +7,10 @@ name: Build (No Signing)
 
 on:
   workflow_dispatch:
-#  push:
-#    branches: [ "master" ]
-#  pull_request:
-#    branches: [ "master" ]
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
     
 env:
   # Path to the solution file relative to the root of the project.
@@ -27,7 +27,6 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    environment: Build
 
     steps:
     - uses: actions/checkout@v6

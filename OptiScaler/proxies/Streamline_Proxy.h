@@ -13,6 +13,7 @@
 #include <sl_pcl.h>
 #include <sl_dlss_g.h>
 #include <sl_reflex.h>
+#include <framegen/dlssg/AdaMFGUnlock.h>
 
 #pragma comment(lib, "Version.lib")
 
@@ -96,6 +97,9 @@ class StreamlineProxy
             State::Instance().optiSlCommon = NtdllProxy::LoadLibraryExW_Ldr(slCommonPath.c_str(), NULL, NULL);
             auto dlssgPath = localSlPath / L"nvngx_dlssg.dll"; // TODO: maybe some search?
             State::Instance().optiDLSSG = NtdllProxy::LoadLibraryExW_Ldr(dlssgPath.c_str(), NULL, NULL);
+
+            if (State::Instance().optiDLSSG != nullptr)
+                AdaMFGUnlock::Manager::PatchNvngxDlssg(State::Instance().optiDLSSG);
 
             return HookStreamline(_dll);
         }
