@@ -183,13 +183,26 @@ class StreamlineProxy
         return result;
     }
 
+    static std::filesystem::path ResolveSlLibraryPath(const std::wstring& filename)
+    {
+        std::filesystem::path basePath(Config::Instance()->MainDllPath.value());
+        auto directPath = basePath / L"streamline" / filename;
+        if (std::filesystem::exists(directPath))
+            return directPath;
+
+        auto optiPath = basePath / L"OptiScaler" / L"streamline" / filename;
+        if (std::filesystem::exists(optiPath))
+            return optiPath;
+
+        return directPath;
+    }
+
     static HMODULE HookStreamlineDLSSG()
     {
         spdlog::info("");
 
-        std::filesystem::path localSlPath(Config::Instance()->MainDllPath.value());
-        localSlPath = localSlPath / L"streamline" / L"sl.dlss_g.dll";
-        auto dlssg = NtdllProxy::LoadLibraryExW_Ldr(localSlPath.c_str(), NULL, NULL);
+        auto dlssgPath = ResolveSlLibraryPath(L"sl.dlss_g.dll");
+        auto dlssg = NtdllProxy::LoadLibraryExW_Ldr(dlssgPath.c_str(), NULL, NULL);
 
         // if already hooked
         if (_slDLSSGSetOptions != nullptr)
@@ -221,9 +234,8 @@ class StreamlineProxy
     {
         spdlog::info("");
 
-        std::filesystem::path localSlPath(Config::Instance()->MainDllPath.value());
-        localSlPath = localSlPath / L"streamline" / L"sl.reflex.dll";
-        auto reflex = NtdllProxy::LoadLibraryExW_Ldr(localSlPath.c_str(), NULL, NULL);
+        auto reflexPath = ResolveSlLibraryPath(L"sl.reflex.dll");
+        auto reflex = NtdllProxy::LoadLibraryExW_Ldr(reflexPath.c_str(), NULL, NULL);
 
         // if already hooked
         if (_slReflexGetState != nullptr)
@@ -260,9 +272,8 @@ class StreamlineProxy
     {
         spdlog::info("");
 
-        std::filesystem::path localSlPath(Config::Instance()->MainDllPath.value());
-        localSlPath = localSlPath / L"streamline" / L"sl.pcl.dll";
-        auto pcl = NtdllProxy::LoadLibraryExW_Ldr(localSlPath.c_str(), NULL, NULL);
+        auto pclPath = ResolveSlLibraryPath(L"sl.pcl.dll");
+        auto pcl = NtdllProxy::LoadLibraryExW_Ldr(pclPath.c_str(), NULL, NULL);
 
         // if already hooked
         if (_slPCLSetMarker != nullptr)

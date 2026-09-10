@@ -8,9 +8,9 @@ name: Build (No Signing)
 on:
   workflow_dispatch:
   push:
-    branches: [ "master", "main", "feat/mfg-turing-ampere" ]
+    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification" ]
   pull_request:
-    branches: [ "master", "main", "feat/mfg-turing-ampere" ]
+    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification" ]
     
 env:
   # Path to the solution file relative to the root of the project.
