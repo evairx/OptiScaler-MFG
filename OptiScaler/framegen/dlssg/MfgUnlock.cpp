@@ -304,9 +304,6 @@ void MfgUnlock::TryApply(HMODULE requestedModule)
         !Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
         return;
 
-    if (State::Instance().externalFrameGeneration)
-        return;
-
     // The kernel retarget is Ada-specific. Do not patch Ampere/Turing or change Blackwell's working path.
     if (!IsSupportedGpu())
         return;
@@ -316,42 +313,53 @@ void MfgUnlock::TryApply(HMODULE requestedModule)
 
     if (!snippetDone)
     {
-        if (auto module = requestedModule ? requestedModule : GetModuleHandleW(L"nvngx_dlssg.dll"); module != nullptr)
+        auto module = requestedModule ? requestedModule : GetModuleHandleW(L"nvngx_dlssg.dll");
+        if (module == nullptr)
+            return;
+
+        // Verify this is actually a DLSS-G module before inspecting or latching
+        wchar_t modPath[MAX_PATH] = {};
+        if (GetModuleFileNameW(module, modPath, MAX_PATH))
         {
-            snippetDone = true;
-            g_status.ModuleFound = true;
-            g_status.SnippetVersion = ModuleVersion(module);
-
-            // Validate both gates before touching either. Ambiguous/unknown versions remain unmodified.
-            const bool knownGates =
-                (UniqueAddress(module, kAdvertisePattern309) && UniqueAddress(module, kValidatePattern309)) ||
-                (UniqueAddress(module, kAdvertisePattern) && UniqueAddress(module, kValidatePattern));
-            if (!knownGates)
-            {
-                LOG_WARN("MFG unlock: unsupported or ambiguous DLSSG {} signatures; left unchanged",
-                         g_status.SnippetVersion);
+            std::wstring p(modPath);
+            std::transform(p.begin(), p.end(), p.begin(), ::towlower);
+            if (p.find(L"dlssg") == std::wstring::npos)
                 return;
-            }
-
-            if (Config::Instance()->FGDLSSGAdaBlackwellKernels.value_or(true))
-                g_status.KernelsRewritten = RewriteBlackwellKernels(module);
-
-            if (g_status.KernelsRewritten == 0)
-            {
-                LOG_WARN("MFG unlock: no compatible interpolation kernels; frame-count gates left unchanged");
-                return;
-            }
-
-            const bool advertise = PatchAdvertise(module);
-            const bool validate = PatchValidate(module);
-            g_status.AdvertiseMatched = advertise;
-            g_status.ValidateMatched = validate;
-
-            if (advertise && validate)
-                LOG_INFO("MFG unlock: nvngx_dlssg.dll patched for {} generated frames", kMaxGeneratedFrames);
-            else
-                LOG_WARN("MFG unlock: nvngx_dlssg.dll incomplete, advertise {}, validate {}", advertise, validate);
         }
+
+        snippetDone = true;
+        g_status.ModuleFound = true;
+        g_status.SnippetVersion = ModuleVersion(module);
+
+        // Validate both gates before touching either. Ambiguous/unknown versions remain unmodified.
+        const bool knownGates =
+            (UniqueAddress(module, kAdvertisePattern309) && UniqueAddress(module, kValidatePattern309)) ||
+            (UniqueAddress(module, kAdvertisePattern) && UniqueAddress(module, kValidatePattern));
+        if (!knownGates)
+        {
+            LOG_WARN("MFG unlock: unsupported or ambiguous DLSSG {} signatures; left unchanged",
+                     g_status.SnippetVersion);
+            return;
+        }
+
+        if (Config::Instance()->FGDLSSGAdaBlackwellKernels.value_or(true))
+            g_status.KernelsRewritten = RewriteBlackwellKernels(module);
+
+        if (g_status.KernelsRewritten == 0)
+        {
+            LOG_WARN("MFG unlock: no compatible interpolation kernels; frame-count gates left unchanged");
+            return;
+        }
+
+        const bool advertise = PatchAdvertise(module);
+        const bool validate = PatchValidate(module);
+        g_status.AdvertiseMatched = advertise;
+        g_status.ValidateMatched = validate;
+
+        if (advertise && validate)
+            LOG_INFO("MFG unlock: nvngx_dlssg.dll patched for {} generated frames", kMaxGeneratedFrames);
+        else
+            LOG_WARN("MFG unlock: nvngx_dlssg.dll incomplete, advertise {}, validate {}", advertise, validate);
     }
 }
 
@@ -369,7 +377,7 @@ bool MfgUnlock::Pending()
         !Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
         return false;
 
-    if (State::Instance().externalFrameGeneration || g_status.ModuleFound)
+    if (g_status.ModuleFound)
         return false;
 
     if (!IsSupportedGpu())
