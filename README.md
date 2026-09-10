@@ -54,11 +54,11 @@
 - Allows users to fine-tune their upscaling experience with a wide range of tweaks and enhancements (RCAS & MAS, Output Scaling, DLSS Presets, Ratio & DRS Overrides etc.)
 - Since v0.7.0+, added ***experimental DX12*** frame generation support with possible HUDfix solution ([**OptiFG**](#optifg--hudfix-experimental-hud-ghosting-fix))
 - Supports [**Fakenvapi**](#installation) integration - enables Reflex hooking and injecting _Anti-Lag 2_ (RDNA1+ only), _LatencyFlex_ (LFX) or _XeLL_ - _bundled since 0.9_  
-- Since v0.7.7, added support for **Nukem's** FSR3-FG mod [**dlssg-to-fsr3**](#installation), only supports games with ***native DLSS-FG*** - _bundled since 0.9_
+- This fork provides optional real NVIDIA DLSS Multi Frame Generation on RTX 40 GPUs when the active DLSS-G provider passes compatibility validation; it never substitutes FSR when validation fails.
 - Since v0.7.8, added **ASI plugin loading** support (_disabled_ by default (`LoadAsiPlugins=` in INI), loads from customisable folder, default `plugins`)
 - New project - [**OptiPatcher**](https://github.com/optiscaler/OptiPatcher) - an ASI Plugin for OptiScaler for enabling DLSS and DLSSG inputs without spoofing in ***supported games***.
 - Since v0.7.8, OptiScaler is now automatically applying certain game patches for a better out-of-the-box experience
-- Since v0.9.0, separated FG Inputs and Outputs, added XeFG and FSR4-FG support, as well as bundled Fakenvapi and Nukem's FSR3-FG mod
+- This fork keeps Intel XeFG and standalone FSR Frame Generation as explicit outputs.
 - For a detailed list of all features, check [Features](Features.md)
 
 
@@ -170,8 +170,7 @@ Please check [this](Config.md) document for configuration parameters and explana
 
 ## Thanks
 * @PotatoOfDoom for CyberFSR2
-* @Artur for DLSS Enabler and helping me implement NVNGX api correctly
-* @LukeFZ & @Nukem for their great mods and sharing their knowledge 
+* @ImDreamt and MFGAdaUnlock-RenoDx contributors for the Ada MFG compatibility work
 * @FakeMichau for continous support, testing and feature creep
 * @QM for continous testing efforts and helping me to reach games
 * @TheRazerMD for continous testing and support
@@ -180,6 +179,8 @@ Please check [this](Config.md) document for configuration parameters and explana
 
 ## Credit
 This project uses [FreeType](https://gitlab.freedesktop.org/freetype/freetype) licensed under the [FTL](https://gitlab.freedesktop.org/freetype/freetype/-/blob/master/docs/FTL.TXT)
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the MFG compatibility attribution and license.
 
 ## Sponsors
 <table>

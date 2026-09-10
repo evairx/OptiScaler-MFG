@@ -1504,8 +1504,7 @@ static void CheckQuirks(bool isNvidia)
         quirks.reset(GameQuirk::UseFsr2VulkanInputs);
 
     if (quirks & GameQuirk::ForceBorderlessWhenUsingXeFG && !Config::Instance()->FGXeFGForceBorderless.has_value() &&
-        State::Instance().activeFgOutput == FGOutput::XeFG && State::Instance().activeFgInput != FGInput::NoFG &&
-        State::Instance().activeFgInput != FGInput::NvngxFG)
+        State::Instance().activeFgOutput == FGOutput::XeFG && State::Instance().activeFgInput != FGInput::NoFG)
     {
         Config::Instance()->FGXeFGForceBorderless.set_volatile_value(true);
     }
@@ -1513,8 +1512,7 @@ static void CheckQuirks(bool isNvidia)
         quirks.reset(GameQuirk::ForceBorderlessWhenUsingXeFG);
 
     if (quirks & GameQuirk::OverrideVsyncWhenUsingXeFG && !Config::Instance()->OverrideVsync.has_value() &&
-        State::Instance().activeFgOutput == FGOutput::XeFG && State::Instance().activeFgInput != FGInput::NoFG &&
-        State::Instance().activeFgInput != FGInput::NvngxFG)
+        State::Instance().activeFgOutput == FGOutput::XeFG && State::Instance().activeFgInput != FGInput::NoFG)
     {
         Config::Instance()->OverrideVsync.set_volatile_value(true);
     }
@@ -1644,16 +1642,14 @@ static void CheckQuirks(bool isNvidia)
     }
 
     // if (!Config::Instance()->DxgiFactoryWrapping.has_value() && Config::Instance()->LoadReShade.value_or_default() &&
-    //     quirks & GameQuirk::CreateD3D12DeviceForLuma && State::Instance().activeFgInput != FGInput::NoFG &&
-    //     State::Instance().activeFgInput != FGInput::NvngxFG)
+    //     quirks & GameQuirk::CreateD3D12DeviceForLuma && State::Instance().activeFgInput != FGInput::NoFG)
     //{
     //     Config::Instance()->DxgiFactoryWrapping.set_volatile_value(true);
     //     State::Instance().detectedQuirks.push_back("Factory wrapping enabled due to delayed ReShade + FG");
     //     LOG_INFO("Factory wrapping enabled due to delayed ReShade + FG");
     // }
 
-    if (Config::Instance()->LoadSpecialK.value_or_default() && State::Instance().activeFgInput != FGInput::NoFG &&
-        State::Instance().activeFgInput != FGInput::NvngxFG)
+    if (Config::Instance()->LoadSpecialK.value_or_default() && State::Instance().activeFgInput != FGInput::NoFG)
     {
         Config::Instance()->LoadSpecialK.set_volatile_value(false);
         State::Instance().detectedQuirks.push_back("FG Inputs are enabled, LoadSpecialK disabled");
@@ -1862,15 +1858,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         // Initial state of FG
         State::Instance().activeFgInput = Config::Instance()->FGInput.value_or_default();
         State::Instance().activeFgOutput = Config::Instance()->FGOutput.value_or_default();
-        State::Instance().activeFgNvngx = Config::Instance()->FGNvngxReplacement.value_or_default();
-
-        // Ensure valid FG configuration
-        if (State::Instance().activeFgInput != FGInput::NvngxFG && State::Instance().activeFgOutput != FGOutput::DLSSG)
-            State::Instance().activeFgNvngx = FGNvngxReplacement::None;
-
-        if (State::Instance().activeFgInput == FGInput::NvngxFG)
-            State::Instance().activeFgOutput = FGOutput::NoFG;
-
         // If no FG input is configured, FG output cannot be active (prevents invalid swapchain hook conflicts)
         if (State::Instance().activeFgInput == FGInput::NoFG)
             State::Instance().activeFgOutput = FGOutput::NoFG;

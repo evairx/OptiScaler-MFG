@@ -6,7 +6,7 @@
 * Ability to modify DLSS/DLSS-D presets on the fly
 * Supports XeSS v1.3.x's Ultra Performance, NativeAA modes (**Not using default XeSS 1.3.x scaling ratios, rather the old ones**) 
 * An [in-game menu](https://github.com/optiscaler/OptiScaler/blob/master/Config.md) for tuning and saving settings on the fly (Shortcut key is **INSERT**)
-* Full integration with [DLSS Enabler](https://www.nexusmods.com/site/mods/757) for DLSS-FG support
+* Optional real NVIDIA DLSS Multi Frame Generation (2x/3x/4x/6x) on supported RTX 40 GPUs and compatible DLSS-G providers
 * **RCAS** support with **MAS** (Motion Adaptive Sharpening) for all Dx12 & Dx11 upscalers
 * **Output Scaling** option (0.5x to 3.0x) for backends running on Dx12 & Dx11
 * Supports DXGI spoofing (when running as `dxgi.dll`) as Nvidia GPUs (with XeSS detection to enable XMX on Intel Arc cards)
@@ -19,6 +19,4 @@
 * Autofixes for [missing exposure texture](https://github.com/optiscaler/OptiScaler/blob/master/Config.md#init-flags) information
 * Ability to modify [Mipmap Lod Bias](https://github.com/optiscaler/OptiScaler/blob/master/Config.md#mipmap-lod-bias-override-dx12-only) game value
 * Supports [Fakenvapi](https://github.com/FakeMichau/fakenvapi) integration which enables Reflex hooking and injecting Anti-Lag 2 or LatencyFlex (LFX)
-* Supports Nukem's FSR FG mod [dlssg-to-fsr3](https://github.com/Nukem9/dlssg-to-fsr3) (since version 0.7.7)  
- 
-**To overcome DLSS 3.7's signature check requirements, OptiScaler uses a method developed by **Artur** (creator of [DLSS Enabler](https://www.nexusmods.com/site/mods/757?tab=description)).**
+* Provides explicit standalone FSR Frame Generation and Intel XeFG outputs; they are never selected as an implicit DLSS MFG fallback

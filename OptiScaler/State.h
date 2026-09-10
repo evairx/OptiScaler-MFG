@@ -14,13 +14,6 @@
 #include <vulkan/vulkan.h>
 #include <ankerl/unordered_dense.h>
 
-enum class FGPreset : uint32_t
-{
-    NoFG,
-    OptiFG,
-    Nukems,
-};
-
 enum class FrameTimeSource : uint32_t
 {
     Input,
@@ -33,7 +26,6 @@ enum class FGInput : uint32_t
     NoFG,
     Upscaler, // OptiFG
     DLSSG,    // technically Streamline inputs
-    NvngxFG,
     FSRFG,
     FSRFG30,
     XeFG,
@@ -47,15 +39,6 @@ enum class FGOutput : uint32_t
     FSRFG,
     DLSSG,
     XeFG,
-};
-
-enum class FGNvngxReplacement : uint32_t
-{
-    None,
-    Nukems,
-    Arturs,
-    FFX,
-    Combo,
 };
 
 enum class WorkingMode : uint32_t
@@ -162,12 +145,6 @@ class State
     // FG
     uint64_t fgLastFrame = 0;
 
-    // Nvngx FG, uses streamline swapchain
-    bool nukemsFgFileAvailable = false;
-    bool artursFgFileAvailable = false;
-    bool dlssgDebugView = false;
-    bool dlssgInterpolatedOnly = false;
-    uint64_t dlssgLastFrame = 0;
     uint32_t delayMenuRenderBy = 0;
 
     // FSR Common
@@ -177,9 +154,7 @@ class State
     // Frame Generation
     FGInput activeFgInput = FGInput::NoFG;
     FGOutput activeFgOutput = FGOutput::NoFG;
-    // This should be set to a non-None value only if all other requirements are met and nvngx can be used
-    FGNvngxReplacement activeFgNvngx = FGNvngxReplacement::None;
-    bool activeUnlockAdaMFG = true;
+    bool activeUnlockAdaMFG = false;
 
     // Streamline FG inputs
     Sl_Inputs_Dx12 slFGInputs = {};

@@ -235,7 +235,6 @@ bool Sl1_Inputs_Dx12::reportCachedResource(const CachedTag& tag, ID3D12GraphicsC
                                            uint32_t frameIndex)
 {
     auto& state = State::Instance();
-    state.dlssgLastFrame = state.fgLastFrame;
 
     auto fgOutput = reinterpret_cast<IFGFeature_Dx12*>(state.currentFG);
 

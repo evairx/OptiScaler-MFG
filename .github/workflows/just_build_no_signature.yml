@@ -22,7 +22,7 @@ env:
   BUILD_CONFIGURATION: Release
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -113,15 +113,3 @@ jobs:
         archive: false
         compression-level: 0
         if-no-files-found: error
-
-    - name: Create or Update GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ steps.get_version.outputs.version }}
-        name: OptiScaler-MFG ${{ steps.get_version.outputs.version }}
-        body_path: RELEASE_NOTES.md
-        draft: false
-        prerelease: false
-        files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

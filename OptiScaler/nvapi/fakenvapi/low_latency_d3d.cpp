@@ -8,7 +8,6 @@
 #include "log.h"
 #include "config.h"
 #include <hooks/Reflex_Hooks.h>
-#include <framegen/nvngx/Nvngx_FG.h>
 
 // private
 bool LowLatency::update_low_latency_tech(IUnknown* pDevice)

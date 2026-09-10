@@ -27,7 +27,9 @@ struct FlipSite {
 
 class Manager {
 private:
-    static inline std::atomic_bool s_enabled{ true };
+    // This is an opt-in compatibility patch. Never touch a game's DLSS-G
+    // provider until the user explicitly enables MFG unlock.
+    static inline std::atomic_bool s_enabled{ false };
     static inline std::atomic_bool s_archPatched{ false };
     static inline std::atomic_bool s_midpointPatched{ false };
     static inline std::atomic_bool s_flipMeteringPatched{ false };
@@ -41,8 +43,8 @@ private:
     static inline uint8_t* s_ceilingSite = nullptr;
     static inline uint8_t s_ceilingOriginal = 0;
     static inline uint8_t s_ceilingCmovOriginal = 0;
-    static inline uint32_t s_ceilingCompiled = 0;
-    static inline uint32_t s_ceilingEffective = 0;
+    static inline std::atomic_uint32_t s_ceilingCompiled { 0 };
+    static inline std::atomic_uint32_t s_ceilingEffective { 0 };
 
     static bool ModuleContains(HMODULE mod, const char* needle, size_t needle_len);
     static bool HasKnownDlssgPath(HMODULE mod);
@@ -62,7 +64,10 @@ public:
     static bool IsMidpointPatched();
     static bool IsFlipMeteringPatched();
     static bool IsCeilingPatched();
+    static bool IsSupportedGpu();
+    static bool IsReadyForMultiFrame();
     static bool IsPacingReady();
+    static uint32_t GetCeilingCompiled();
     static uint32_t GetCeilingEffective();
 
     // Triggered when a module is loaded or during bootstrap

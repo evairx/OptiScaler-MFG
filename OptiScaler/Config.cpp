@@ -76,8 +76,6 @@ bool Config::Reload(std::filesystem::path iniPath)
                     FGInput.set_from_config(FGInput::NoFG);
                 else if (lstrcmpiA(FGInputString.value().c_str(), "upscaler") == 0)
                     FGInput.set_from_config(FGInput::Upscaler);
-                else if (lstrcmpiA(FGInputString.value().c_str(), "nvngxfg") == 0)
-                    FGInput.set_from_config(FGInput::NvngxFG);
                 else if (lstrcmpiA(FGInputString.value().c_str(), "dlssg") == 0)
                     FGInput.set_from_config(FGInput::DLSSG);
                 else if (lstrcmpiA(FGInputString.value().c_str(), "fsrfg") == 0)
@@ -85,15 +83,9 @@ bool Config::Reload(std::filesystem::path iniPath)
                 else if (lstrcmpiA(FGInputString.value().c_str(), "fsrfg30") == 0)
                     FGInput.set_from_config(FGInput::FSRFG30);
 
-                if (lstrcmpiA(FGInputString.value().c_str(), "nukems") == 0)
-                {
-                    FGInput.set_from_config(FGInput::NvngxFG);
-                    ini.SetValue("FrameGen", "FGNvngxReplacement", "nukems");
-                }
             }
 
-            if (auto FGOutputString = readString("FrameGen", "FGOutput");
-                FGInput.value_or_default() != FGInput::NvngxFG && FGOutputString.has_value())
+            if (auto FGOutputString = readString("FrameGen", "FGOutput"); FGOutputString.has_value())
             {
                 if (lstrcmpiA(FGOutputString.value().c_str(), "nofg") == 0)
                     FGOutput.set_from_config(FGOutput::NoFG);
@@ -103,24 +95,6 @@ bool Config::Reload(std::filesystem::path iniPath)
                     FGOutput.set_from_config(FGOutput::XeFG);
                 else if (lstrcmpiA(FGOutputString.value().c_str(), "dlssg") == 0)
                     FGOutput.set_from_config(FGOutput::DLSSG);
-            }
-
-            const bool canUseNvngxReplacement =
-                FGInput.value_or_default() == FGInput::NvngxFG || FGOutput.value_or_default() == FGOutput::DLSSG;
-
-            if (auto FGNvngxReplacementString = readString("FrameGen", "FGNvngxReplacement");
-                canUseNvngxReplacement && FGNvngxReplacementString.has_value())
-            {
-                if (lstrcmpiA(FGNvngxReplacementString.value().c_str(), "none") == 0)
-                    FGNvngxReplacement.set_from_config(FGNvngxReplacement::None);
-                else if (lstrcmpiA(FGNvngxReplacementString.value().c_str(), "nukems") == 0)
-                    FGNvngxReplacement.set_from_config(FGNvngxReplacement::Nukems);
-                else if (lstrcmpiA(FGNvngxReplacementString.value().c_str(), "arturs") == 0)
-                    FGNvngxReplacement.set_from_config(FGNvngxReplacement::Arturs);
-                else if (lstrcmpiA(FGNvngxReplacementString.value().c_str(), "ffx") == 0)
-                    FGNvngxReplacement.set_from_config(FGNvngxReplacement::FFX);
-                else if (lstrcmpiA(FGNvngxReplacementString.value().c_str(), "combo") == 0)
-                    FGNvngxReplacement.set_from_config(FGNvngxReplacement::Combo);
             }
 
             if (auto forceXell = readBool("fakenvapi", "ForceXeLL"); forceXell.has_value() && forceXell.value())
@@ -385,18 +359,6 @@ bool Config::Reload(std::filesystem::path iniPath)
             if (auto setting = readInt("DLSSD", "RenderPresetUltraPerformance");
                 setting.has_value() && setting >= 0 && (setting < presetCount || setting == NV_PRESET_LATEST))
                 DLSSDRenderPresetUltraPerformance.set_from_config(setting);
-        }
-
-        // NvngxFG
-        {
-            if (auto setting = readBool("Nukems", "MakeDepthCopy"); setting.has_value() && setting.value())
-                NvngxFGMakeDepthCopy.set_from_config(setting); // For compat with older config
-            else
-                NvngxFGMakeDepthCopy.set_from_config(readBool("NvngxFG", "MakeDepthCopy"));
-
-            NvngxFGDispatchFlags.set_from_config(readUInt("NvngxFG", "DispatchFlags"));
-            NvngxFGShowDebug.set_from_config(readBool("NvngxFG", "ShowDebug"));
-            NvngxFGDisableHudless.set_from_config(readBool("NvngxFG", "DisableHudless"));
         }
 
         // Logging
@@ -704,8 +666,7 @@ bool Config::Reload(std::filesystem::path iniPath)
             // Enable HAGS when DLSS-G will be used
             if (!SpoofHAGS.has_value())
             {
-                SpoofHAGS.set_volatile_value(FGInput.value_or_default() == FGInput::NvngxFG ||
-                                             FGInput.value_or_default() == FGInput::DLSSG);
+                SpoofHAGS.set_volatile_value(FGInput.value_or_default() == FGInput::DLSSG);
             }
         }
 
@@ -890,8 +851,6 @@ bool Config::SaveIni()
                 FGInputString = "NoFG";
             else if (FGInputHeld.value() == FGInput::Upscaler)
                 FGInputString = "Upscaler";
-            else if (FGInputHeld.value() == FGInput::NvngxFG)
-                FGInputString = "NvngxFG";
             else if (FGInputHeld.value() == FGInput::DLSSG)
                 FGInputString = "DLSSG";
             else if (FGInputHeld.value() == FGInput::FSRFG)
@@ -914,23 +873,6 @@ bool Config::SaveIni()
                 FGOutputString = "DLSSG";
         }
         ini.SetValue("FrameGen", "FGOutput", FGOutputString.c_str());
-
-        std::string FGNvngxReplacementString = "auto";
-        if (auto FGNvngxReplacementHeld = Instance()->FGNvngxReplacement.value_for_config();
-            FGNvngxReplacementHeld.has_value())
-        {
-            if (FGNvngxReplacementHeld.value() == FGNvngxReplacement::None)
-                FGNvngxReplacementString = "None";
-            else if (FGNvngxReplacementHeld.value() == FGNvngxReplacement::Nukems)
-                FGNvngxReplacementString = "Nukems";
-            else if (FGNvngxReplacementHeld.value() == FGNvngxReplacement::Arturs)
-                FGNvngxReplacementString = "Arturs";
-            else if (FGNvngxReplacementHeld.value() == FGNvngxReplacement::FFX)
-                FGNvngxReplacementString = "FFX";
-            else if (FGNvngxReplacementHeld.value() == FGNvngxReplacement::Combo)
-                FGNvngxReplacementString = "Combo";
-        }
-        ini.SetValue("FrameGen", "FGNvngxReplacement", FGNvngxReplacementString.c_str());
 
         std::optional<int> ftInput;
         if (Instance()->FTInput.has_value())
@@ -1187,17 +1129,6 @@ bool Config::SaveIni()
                      GetIntValue(Instance()->DLSSDRenderPresetPerformance.value_for_config()).c_str());
         ini.SetValue("DLSSD", "RenderPresetUltraPerformance",
                      GetIntValue(Instance()->DLSSDRenderPresetUltraPerformance.value_for_config()).c_str());
-    }
-
-    // NvngxFG
-    {
-        ini.SetValue("NvngxFG", "MakeDepthCopy",
-                     GetBoolValue(Instance()->NvngxFGMakeDepthCopy.value_for_config()).c_str());
-        ini.SetValue("NvngxFG", "DispatchFlags",
-                     GetIntValue(Instance()->NvngxFGDispatchFlags.value_for_config(), true).c_str());
-        ini.SetValue("NvngxFG", "ShowDebug", GetBoolValue(Instance()->NvngxFGShowDebug.value_for_config()).c_str());
-        ini.SetValue("NvngxFG", "DisableHudless",
-                     GetBoolValue(Instance()->NvngxFGDisableHudless.value_for_config()).c_str());
     }
 
     // Sharpness
@@ -1593,7 +1524,6 @@ bool Config::SaveIni()
     // Old configs, just delete them
     {
         ini.Delete("FSR", "Fsr4ForceEnableInt8");
-        ini.Delete("Nukems", "MakeDepthCopy", true);
     }
 
     auto pathWStr = absoluteFileName.wstring();

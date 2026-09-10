@@ -166,8 +166,7 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
         return LibraryLoadHooks::LoadNvApi();
     }
 
-    // Hook SL from local path if using Nvngx FG (and probably upgrading SL for it)
-    const bool shouldHookSl = !pathInsideLocalSlPath || State::Instance().activeFgInput == FGInput::NvngxFG;
+    const bool shouldHookSl = !pathInsideLocalSlPath;
 
     // sl.interposer.dll
     if (CheckDllNameW(&libName, &slInterposerNamesW) && shouldHookSl)

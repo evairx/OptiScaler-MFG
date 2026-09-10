@@ -14,8 +14,46 @@
 #include <magic_enum.hpp>
 
 #include <DirectXMath.h>
+#include <atomic>
 
 using namespace DirectX;
+
+namespace {
+
+void UpdateVerifiedMfgCapabilities(int& maxInterpolationCount)
+{
+    static std::atomic_bool reportedUnavailable { false };
+
+    if (!Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    {
+        maxInterpolationCount = std::max(maxInterpolationCount, 1);
+        return;
+    }
+
+    AdaMFGUnlock::Manager::SetEnabled(true);
+    AdaMFGUnlock::Manager::CheckAndPatchAll();
+
+    if (!AdaMFGUnlock::Manager::IsReadyForMultiFrame())
+    {
+        // Keep the provider's native capability. A checked box must never
+        // manufacture x3-x6 support when the exact module was not patched.
+        maxInterpolationCount = std::max(maxInterpolationCount, 1);
+        if (!reportedUnavailable.exchange(true))
+        {
+            LOG_WARN("DLSSG: MFG unlock is enabled but the active provider is not validated for real multi-frame generation; using native DLSS-G limits.");
+        }
+        return;
+    }
+
+    reportedUnavailable = false;
+
+    maxInterpolationCount = std::max(maxInterpolationCount,
+                                     static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective()));
+    // Dynamic MFG has a separate provider capability bit and remains governed
+    // exclusively by slDLSSGGetState.
+}
+
+} // namespace
 
 feature_version DLSSG_Dx12::Version()
 {
@@ -32,8 +70,9 @@ HWND DLSSG_Dx12::Hwnd() { return _hwnd; }
 
 int DLSSG_Dx12::GetMaxInterpolationCount() const
 {
-    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-        return 5;
+    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default() &&
+        AdaMFGUnlock::Manager::IsReadyForMultiFrame())
+        return static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective());
     if (_maxInterpolationCount > 1)
         return _maxInterpolationCount;
     return 1;
@@ -41,8 +80,6 @@ int DLSSG_Dx12::GetMaxInterpolationCount() const
 
 bool DLSSG_Dx12::GetDMFGSupport() const
 {
-    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-        return true;
     return _supportsDMFG;
 }
 
@@ -141,13 +178,7 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
         if (_maxInterpolationCount < 1)
             _maxInterpolationCount = 1;
 
-        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-        {
-            AdaMFGUnlock::Manager::SetEnabled(true);
-            AdaMFGUnlock::Manager::CheckAndPatchAll();
-            _maxInterpolationCount = 5;
-            _supportsDMFG = true;
-        }
+        UpdateVerifiedMfgCapabilities(_maxInterpolationCount);
 
         LOG_INFO("Max supported interpolations: {}", _maxInterpolationCount);
 
@@ -157,13 +188,7 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
     else
     {
         _maxInterpolationCount = 1;
-        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-        {
-            AdaMFGUnlock::Manager::SetEnabled(true);
-            AdaMFGUnlock::Manager::CheckAndPatchAll();
-            _maxInterpolationCount = 5;
-            _supportsDMFG = true;
-        }
+        UpdateVerifiedMfgCapabilities(_maxInterpolationCount);
     }
 
     _gameCommandQueue = cmdQueue;
@@ -273,13 +298,7 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
         if (_maxInterpolationCount < 1)
             _maxInterpolationCount = 1;
 
-        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-        {
-            AdaMFGUnlock::Manager::SetEnabled(true);
-            AdaMFGUnlock::Manager::CheckAndPatchAll();
-            _maxInterpolationCount = 5;
-            _supportsDMFG = true;
-        }
+        UpdateVerifiedMfgCapabilities(_maxInterpolationCount);
 
         LOG_INFO("Max supported interpolations: {}", _maxInterpolationCount);
 
@@ -289,13 +308,7 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
     else
     {
         _maxInterpolationCount = 1;
-        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-        {
-            AdaMFGUnlock::Manager::SetEnabled(true);
-            AdaMFGUnlock::Manager::CheckAndPatchAll();
-            _maxInterpolationCount = 5;
-            _supportsDMFG = true;
-        }
+        UpdateVerifiedMfgCapabilities(_maxInterpolationCount);
     }
 
     _gameCommandQueue = cmdQueue;
@@ -407,19 +420,7 @@ bool DLSSG_Dx12::Dispatch()
 
     auto& state = State::Instance();
 
-    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-    {
-        AdaMFGUnlock::Manager::SetEnabled(true);
-        AdaMFGUnlock::Manager::CheckAndPatchAll();
-        if (_maxInterpolationCount < 5)
-            _maxInterpolationCount = 5;
-        _supportsDMFG = true;
-    }
-    else
-    {
-        if (_maxInterpolationCount < 1)
-            _maxInterpolationCount = 1;
-    }
+    UpdateVerifiedMfgCapabilities(_maxInterpolationCount);
 
     int targetCount = 1;
     if (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value() &&
@@ -449,10 +450,14 @@ bool DLSSG_Dx12::Dispatch()
     options.numFramesToGenerate = _framesToInterpolate;
     options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
 
-    if (Config::Instance()->FGDLSSGForceDMFG.value_or_default())
+    if (Config::Instance()->FGDLSSGForceDMFG.value_or_default() && _supportsDMFG)
     {
         options.mode = sl::DLSSGMode::eDynamic;
         options.dynamicTargetFrameRate = Config::Instance()->FGDLSSGFramerateTargetDMFG.value_or_default();
+    }
+    else if (Config::Instance()->FGDLSSGForceDMFG.value_or_default())
+    {
+        LOG_WARN("DLSSG: Dynamic MFG was requested but is not reported by the active NVIDIA provider; keeping fixed MFG.");
     }
 
     if (StreamlineProxy::DLSSGSetOptions() != nullptr)
@@ -460,6 +465,22 @@ bool DLSSG_Dx12::Dispatch()
         StreamlineHooks::isOptiScalerSettingDLSSGOptions = true;
         auto dlssgSetOptionsResult = StreamlineProxy::DLSSGSetOptions()(viewport, options);
         StreamlineHooks::isOptiScalerSettingDLSSGOptions = false;
+
+        if (dlssgSetOptionsResult != sl::Result::eOk && _framesToInterpolate > 1)
+        {
+            // Mirror the ReShade addon behavior: retry a transient activation
+            // failure once, then restore x2. This is still NVIDIA DLSS-G; no
+            // FSR provider is selected or loaded as a fallback.
+            dlssgSetOptionsResult = StreamlineProxy::DLSSGSetOptions()(viewport, options);
+            if (dlssgSetOptionsResult != sl::Result::eOk)
+            {
+                LOG_WARN("DLSSG: provider rejected {}x MFG twice ({}); falling back to native x2.",
+                         _framesToInterpolate + 1, magic_enum::enum_name(dlssgSetOptionsResult));
+                _framesToInterpolate = 1;
+                options.numFramesToGenerate = 1;
+                dlssgSetOptionsResult = StreamlineProxy::DLSSGSetOptions()(viewport, options);
+            }
+        }
 
         if (dlssgSetOptionsResult != sl::Result::eOk)
         {

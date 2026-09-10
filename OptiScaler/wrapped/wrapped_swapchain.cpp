@@ -805,9 +805,6 @@ HRESULT STDMETHODCALLTYPE WrappedIDXGISwapChain4::SetFullscreenState(BOOL Fullsc
 
     {
 #ifdef USE_LOCAL_MUTEX
-        // dlssg calls this from present it seems
-        // don't try to get a mutex when present owns it while dlssg mod is enabled
-        if (!(_localMutex.getOwner() == 4 && State::Instance().activeFgNvngx != FGNvngxReplacement::None))
         {
             OwnedLockGuard lock(_localMutex, 3);
         }
@@ -861,9 +858,6 @@ HRESULT STDMETHODCALLTYPE WrappedIDXGISwapChain4::ResizeBuffers(UINT BufferCount
     LOG_DEBUG("");
 
 #ifdef USE_LOCAL_MUTEX
-    // dlssg calls this from present it seems
-    // don't try to get a mutex when present owns it while dlssg mod is enabled
-    if (!(_localMutex.getOwner() == 4 && State::Instance().activeFgNvngx != FGNvngxReplacement::None))
     {
         OwnedLockGuard lock(_localMutex, 1);
     }
@@ -1251,9 +1245,6 @@ HRESULT STDMETHODCALLTYPE WrappedIDXGISwapChain4::ResizeBuffers1(UINT BufferCoun
     LOG_DEBUG("");
 
 #ifdef USE_LOCAL_MUTEX
-    // dlssg calls this from present it seems
-    // don't try to get a mutex when present owns it while dlssg mod is enabled
-    if (!(_localMutex.getOwner() == 4 && State::Instance().activeFgNvngx != FGNvngxReplacement::None))
     {
         OwnedLockGuard lock(_localMutex, 2);
     }

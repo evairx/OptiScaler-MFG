@@ -9,7 +9,6 @@
 #include <misc/IdentifyGpu.h>
 #include <hooks/Reflex_Hooks.h>
 #include <menu/menu_overlay_base.h>
-#include <framegen/nvngx/Nvngx_FG.h>
 #include <proxies/KernelBase_Proxy.h>
 #include <imgui/ImGuiNotify.hpp>
 #include <framegen/dlssg/AdaMFGUnlock.h>
@@ -123,121 +122,6 @@ sl::Result StreamlineHooks::hkslInit(const sl::Preferences& pref, uint64_t sdkVe
     if (localPref.engine == sl::EngineType::eUnreal)
         State::Instance().gameQuirks |= GameQuirk::ForceUnrealEngine;
 
-    std::filesystem::path localSlPath(Config::Instance()->MainDllPath.value());
-    localSlPath = localSlPath / L"streamline"; // Hardcoded streamline folder
-
-    auto localSlPathStr = localSlPath.wstring();
-
-    std::vector<const wchar_t*> storage;
-
-    // Replace the SL files to allow for MFG
-    if (State::Instance().activeFgInput == FGInput::NvngxFG && std::filesystem::exists(localSlPath / L"sl.common.dll"))
-    {
-        storage.assign(localPref.pathsToPlugins, localPref.pathsToPlugins + localPref.numPathsToPlugins);
-
-        std::filesystem::path pluginsDir;
-
-        // Find the first path that contains sl.common.dll
-        // If storage is empty, look in the exe folder. pathsToPlugins is an optional field
-        if (storage.empty())
-        {
-            std::filesystem::path exeFolder = Util::ExePath().parent_path();
-            if (std::filesystem::exists(exeFolder / L"sl.common.dll"))
-            {
-                pluginsDir = exeFolder;
-            }
-        }
-        else
-        {
-            for (const wchar_t* pathStr : storage)
-            {
-                if (!pathStr)
-                    continue;
-
-                std::filesystem::path p = pathStr;
-                if (std::filesystem::exists(p / L"sl.common.dll"))
-                {
-                    pluginsDir = p;
-                    break;
-                }
-            }
-        }
-
-        std::vector<std::string> missingDlls;
-        bool hasNewerPlugin = false;
-
-        // If we found the plugins folder, scan its contents
-        if (!pluginsDir.empty() && std::filesystem::exists(pluginsDir))
-        {
-            for (const auto& entry : std::filesystem::directory_iterator(pluginsDir))
-            {
-                if (!entry.is_regular_file())
-                    continue;
-
-                std::wstring filename = entry.path().filename().wstring();
-
-                std::wstring lowerName = filename;
-                to_lower_in_place(lowerName);
-
-                // Skip interposer
-                if (lowerName == L"sl.interposer.dll")
-                    continue;
-
-                const bool isSlDll = lowerName.starts_with(L"sl.") && lowerName.ends_with(L".dll");
-                const bool isNvLowLatency = lowerName == L"nvlowlatencyvk.dll";
-
-                if (isSlDll || isNvLowLatency)
-                {
-                    std::filesystem::path localDllPath = localSlPath / filename;
-
-                    // Check if localSlPath also has this DLL
-                    if (!std::filesystem::exists(localDllPath))
-                    {
-                        missingDlls.push_back(entry.path().filename().string());
-                    }
-                    else
-                    {
-                        // Compare versions
-                        version_t pluginVer, pluginProdVer;
-                        version_t localVer, localProdVer;
-
-                        bool gotPluginVer = Util::GetFileVersion(entry.path().wstring(), &pluginVer, &pluginProdVer);
-                        bool gotLocalVer = Util::GetFileVersion(localDllPath.wstring(), &localVer, &localProdVer);
-
-                        if (gotPluginVer && gotLocalVer)
-                        {
-                            if (localVer > pluginVer)
-                            {
-                                hasNewerPlugin = true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Insert local path only if a newer plugin was found
-        if (hasNewerPlugin)
-        {
-            LOG_DEBUG("Making the game use local streamline files");
-
-            storage.insert(storage.begin(), localSlPathStr.c_str());
-            localPref.pathsToPlugins = storage.data();
-            localPref.numPathsToPlugins = (uint32_t) storage.size();
-
-            if (!missingDlls.empty())
-            {
-                std::string toastMsg = "You are missing the following dlls from the streamline folder:\n";
-                for (const auto& missingDll : missingDlls)
-                {
-                    toastMsg += "- " + missingDll + "\n";
-                }
-
-                ImGui::InsertNotification({ ImGuiToastType::Warning, 20000, toastMsg.c_str() });
-            }
-        }
-    }
-
     if (State::Instance().activeFgInput == FGInput::DLSSG || State::Instance().activeFgOutput == FGOutput::DLSSG)
     {
         std::vector<sl::Feature> localFeaturesToLoad(pref.featuresToLoad, pref.featuresToLoad + pref.numFeaturesToLoad);
@@ -249,12 +133,6 @@ sl::Result StreamlineHooks::hkslInit(const sl::Preferences& pref, uint64_t sdkVe
         // return so that localFeaturesToLoad is valid
         return o_slInit(localPref, sdkVersion);
     }
-
-    // bool hookSetTag =
-    //     (State::Instance().activeFgInput == FGInput::NvngxFG || State::Instance().activeFgInput == FGInput::DLSSG);
-
-    // if (hookSetTag)
-    //     localPref->flags &= ~(sl::PreferenceFlags::eAllowOTA | sl::PreferenceFlags::eLoadDownloadedPlugins);
 
     // To prevent mixed up OTA situations
     // if (State::Instance().activeFgOutput == FGOutput::DLSSG)
@@ -421,10 +299,6 @@ sl::Result StreamlineHooks::hkslSetTag(const sl::ViewportHandle& viewport, const
         {
             State::Instance().slFGInputs.reportResource(tags[i], (ID3D12GraphicsCommandList*) cmdBuffer, 0);
         }
-        else if (State::Instance().activeFgInput == FGInput::NvngxFG)
-        {
-            LOG_TRACE("Tagging resource of type: {}", magic_enum::enum_name(typeEnum));
-        }
     }
 
     auto result = o_slSetTag(viewport, tags, numTags, cmdBuffer);
@@ -500,10 +374,6 @@ sl::Result StreamlineHooks::hkslSetTagForFrame(const sl::FrameToken& frame, cons
         {
             State::Instance().slFGInputs.reportResource(resources[i], (ID3D12GraphicsCommandList*) cmdBuffer,
                                                         (uint32_t) frame);
-        }
-        else if (State::Instance().activeFgInput == FGInput::NvngxFG)
-        {
-            LOG_TRACE("Tagging resource of type: {}", magic_enum::enum_name(typeEnum));
         }
     }
 
@@ -774,12 +644,6 @@ void StreamlineHooks::spoofArch(uint32_t currentArch, sl::Feature feature, Syste
     // Don't change arch for DLSSG with ada and above
     else if (feature == sl::kFeatureDLSS_G)
     {
-        if (State::Instance().activeFgNvngx != FGNvngxReplacement::None)
-        {
-            if (!Nvngx_FG::isDx12Available() && !Nvngx_FG::isVulkanAvailable())
-                return setArch(0);
-        }
-
         if (currentArch < NV_GPU_ARCHITECTURE_AD100)
             return setArch(maxArch, altSystemCaps);
     }
@@ -874,9 +738,8 @@ bool StreamlineHooks::hkdlssg_slOnPluginLoad(sl::param::IParameters* params, con
     // TODO: do it better than "static" and hoping for the best
     static std::string config;
 
-    bool shouldSpoofArch =
-        Config::Instance()->StreamlineSpoofing.value_or_default() &&
-        (State::Instance().activeFgInput == FGInput::NvngxFG || State::Instance().activeFgInput == FGInput::DLSSG);
+    bool shouldSpoofArch = Config::Instance()->StreamlineSpoofing.value_or_default() &&
+                           State::Instance().activeFgInput == FGInput::DLSSG;
 
     uint32_t currentArch = 0;
     if (shouldSpoofArch)
@@ -918,7 +781,7 @@ bool StreamlineHooks::hkdlssg_slOnPluginLoad(sl::param::IParameters* params, con
             configJson["external"]["vk"]["device"]["1.3_features"].clear();
     }
 
-    if (State::Instance().activeFgInput == FGInput::DLSSG || State::Instance().activeFgInput == FGInput::NvngxFG)
+    if (State::Instance().activeFgInput == FGInput::DLSSG)
     {
         if (configJson.contains("/vsync/supported"_json_pointer))
             configJson["vsync"]["supported"] = true; // disable eVSyncOffRequired
@@ -1154,14 +1017,31 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 
     LOG_TRACE("DLSSG Modified Mode: {}", magic_enum::enum_name(newOptions.mode));
 
-    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    const bool mfgUnlockEnabled = Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default();
+    if (mfgUnlockEnabled)
     {
+        AdaMFGUnlock::Manager::SetEnabled(true);
         AdaMFGUnlock::Manager::CheckAndPatchAll();
-        state.dlssgMfgMax = 5;
+    }
+    const bool mfgReady = mfgUnlockEnabled && AdaMFGUnlock::Manager::IsReadyForMultiFrame();
+    if (mfgUnlockEnabled)
+    {
+        if (mfgReady)
+        {
+            state.dlssgMfgMax = static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective());
+        }
+        else
+        {
+            // Do not advertise multipliers merely because the toggle is on.
+            // The provider patch, the Ada temporal patch and the actual
+            // Streamline ceiling all have to be present first.
+            state.dlssgMfgMax.reset();
+        }
     }
 
     if (dlssgPotentiallyActive &&
-        (state.streamlineVersion >= feature_version { 2, 7, 1 } || Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default()))
+        (state.streamlineVersion >= feature_version { 2, 7, 1 } || mfgReady) &&
+        (!mfgUnlockEnabled || mfgReady))
     {
         // Populate dlssgMfgMax once
         if (!state.dlssgMfgMax.has_value())
@@ -1182,26 +1062,41 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
             }
         }
 
-        // Won't take effect with Dynamic
+        const int maxGeneratedFrames = state.dlssgMfgMax.value_or(1);
+
+        // Won't take effect with Dynamic. Only override a count that this
+        // exact provider has confirmed it can accept; never turn an invalid
+        // x3-x6 request into a UI-only setting.
         if (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value())
         {
             auto overrideCount = Config::Instance()->FGDLSSGOverrideInterpolationCount.value();
-            if (overrideCount != 0)
+            if (overrideCount > 0 && overrideCount <= maxGeneratedFrames)
                 newOptions.numFramesToGenerate = overrideCount;
             else if (!enableDynamicMode)
-                newOptions.mode = sl::DLSSGMode::eOff;
+            {
+                if (overrideCount > maxGeneratedFrames)
+                {
+                    LOG_WARN("StreamlineHooks: refusing requested {}x MFG; the active provider has only verified up to {}x.",
+                             overrideCount + 1, maxGeneratedFrames + 1);
+                }
+                else
+                {
+                    newOptions.mode = sl::DLSSGMode::eOff;
+                }
+            }
         }
     }
 
-    // Safety guard matching ReShade:
-    // If requesting >1 generated frames (3X+), verify software pacing (flip metering patched)
+    // The legacy software-flip workaround is optional. Current providers pace
+    // natively; when the workaround was explicitly requested, require that it
+    // was successfully installed before allowing 3x+.
     if (newOptions.numFramesToGenerate > 1 && !AdaMFGUnlock::Manager::IsPacingReady())
     {
         AdaMFGUnlock::Manager::CheckAndPatchAll();
         if (!AdaMFGUnlock::Manager::IsPacingReady())
         {
-            LOG_WARN("StreamlineHooks: Software pacing (flip metering) not ready; clamping numFramesToGenerate to 1 to prevent freeze");
-            newOptions.numFramesToGenerate = 1;
+            LOG_WARN("StreamlineHooks: requested legacy software pacing is unavailable; forwarding the game's DLSS-G request unchanged.");
+            newOptions.numFramesToGenerate = options.numFramesToGenerate;
         }
     }
 
@@ -1209,15 +1104,16 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 
     sl::Result result = o_slDLSSGSetOptions(viewport, newOptions);
 
-    if (result != sl::Result::eOk && newOptions.numFramesToGenerate > 1)
+    if (result != sl::Result::eOk && newOptions.numFramesToGenerate > options.numFramesToGenerate)
     {
         // DLSS-G can return eErrorFeatureManagerInvalidState on the first attempt when activating.
         // Retry once before falling back.
         result = o_slDLSSGSetOptions(viewport, newOptions);
         if (result != sl::Result::eOk)
         {
-            LOG_WARN("StreamlineHooks: slDLSSGSetOptions refused numFramesToGenerate={}, retrying fallback to 1", newOptions.numFramesToGenerate);
-            newOptions.numFramesToGenerate = 1;
+            LOG_WARN("StreamlineHooks: slDLSSGSetOptions refused {}x MFG twice; restoring the game's request of {}x.",
+                     newOptions.numFramesToGenerate + 1, options.numFramesToGenerate + 1);
+            newOptions.numFramesToGenerate = options.numFramesToGenerate;
             result = o_slDLSSGSetOptions(viewport, newOptions);
         }
     }
@@ -1249,10 +1145,7 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
 
         if (originalStructVersion >= 2)
         {
-            if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-                state.numFramesToGenerateMax = 5;
-            else
-                state.numFramesToGenerateMax = newState.numFramesToGenerateMax;
+            state.numFramesToGenerateMax = newState.numFramesToGenerateMax;
 
             state.bReserved4 = newState.bReserved4;
             state.bIsVsyncSupportAvailable = newState.bIsVsyncSupportAvailable;
@@ -1272,8 +1165,6 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
         result = o_slDLSSGGetState(viewport, state, options);
         State::Instance().dlssgGameDMFGSupported = state.bIsDynamicMFGSupported == sl::eTrue;
 
-        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-            state.numFramesToGenerateMax = 5;
     }
 
     if (!State::Instance().dlssgGameDMFGSupported)
@@ -1285,12 +1176,23 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
 
     if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
     {
+        AdaMFGUnlock::Manager::SetEnabled(true);
         AdaMFGUnlock::Manager::CheckAndPatchAll();
-        optiState.dlssgMfgMax = 5;
+        if (AdaMFGUnlock::Manager::IsReadyForMultiFrame())
+        {
+            const auto maxGenerated = AdaMFGUnlock::Manager::GetCeilingEffective();
+            optiState.dlssgMfgMax = static_cast<int>(maxGenerated);
+            if (state.structVersion >= 2)
+                state.numFramesToGenerateMax = maxGenerated;
+        }
+        else
+        {
+            optiState.dlssgMfgMax.reset();
+        }
     }
 
-    if (optiState.streamlineVersion >= feature_version { 2, 7, 1 } ||
-        Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    if (!Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default() &&
+        optiState.streamlineVersion >= feature_version { 2, 7, 1 })
     {
         if (!optiState.dlssgMfgMax.has_value())
         {
@@ -1333,9 +1235,6 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
         {
             state.numFramesActuallyPresented = 1;
         }
-
-        if (state.structVersion >= 2)
-            state.numFramesToGenerateMax = 1;
 
         LOG_DEBUG("Status: {}, numFramesActuallyPresented: {}", magic_enum::enum_name(state.status),
                   state.numFramesActuallyPresented);
@@ -1504,12 +1403,6 @@ void* StreamlineHooks::hkdlssg_slGetPluginFunction(const char* functionName)
 void* StreamlineHooks::hklocal_dlssg_slGetPluginFunction(const char* functionName)
 {
     // LOG_DEBUG("{}", functionName);
-
-    if (strcmp(functionName, "slOnPluginLoad") == 0 && State::Instance().activeFgNvngx != FGNvngxReplacement::None)
-    {
-        o_local_dlssg_slOnPluginLoad = (PFN_slOnPluginLoad) o_local_dlssg_slGetPluginFunction(functionName);
-        return &hklocal_dlssg_slOnPluginLoad;
-    }
 
     return o_local_dlssg_slGetPluginFunction(functionName);
 }
@@ -1940,8 +1833,7 @@ void StreamlineHooks::hookInterposer(HMODULE slInterposer)
                 if (o_slEvaluateFeature != nullptr)
                     DetourAttach(&(PVOID&) o_slEvaluateFeature, hkslEvaluateFeature);
 
-                if (State::Instance().activeFgInput == FGInput::NvngxFG ||
-                    State::Instance().activeFgInput == FGInput::DLSSG)
+                if (State::Instance().activeFgInput == FGInput::DLSSG)
                 {
                     if (o_slSetTag != nullptr)
                         DetourAttach(&(PVOID&) o_slSetTag, hkslSetTag);

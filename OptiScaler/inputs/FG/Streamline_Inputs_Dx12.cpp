@@ -284,7 +284,6 @@ bool Sl_Inputs_Dx12::evaluateState()
 bool Sl_Inputs_Dx12::reportResource(const sl::ResourceTag& tag, ID3D12GraphicsCommandList* cmdBuffer, uint32_t frameId)
 {
     auto& state = State::Instance();
-    state.dlssgLastFrame = state.fgLastFrame;
 
     auto fgOutput = reinterpret_cast<IFGFeature_Dx12*>(state.currentFG);
 

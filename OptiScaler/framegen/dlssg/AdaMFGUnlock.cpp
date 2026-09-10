@@ -147,33 +147,6 @@ inline bool BuildTemporalFatbin(const uint8_t* fat, size_t fat_size,
         return false;
     }
 
-    // Determine target GPU architecture: sm_89 for Ada (RTX 40), sm_86 for Ampere (RTX 30), sm_75 for Turing (RTX 20)
-    uint32_t targetArch = kAdaArch; // 89
-    std::string targetPtx = "sm_89";
-
-    auto primaryGpu = IdentifyGpu::getPrimaryGpu();
-    if (primaryGpu.vendorId == VendorId::Nvidia) {
-        if (primaryGpu.nvidiaArchInfo.architecture_id == NV_GPU_ARCHITECTURE_TU100) {
-            targetArch = 75;
-            targetPtx = "sm_75";
-        } else if (primaryGpu.nvidiaArchInfo.architecture_id < NV_GPU_ARCHITECTURE_AD100 &&
-                   primaryGpu.nvidiaArchInfo.architecture_id >= NV_GPU_ARCHITECTURE_GA100) {
-            targetArch = 86;
-            targetPtx = "sm_86";
-        }
-    }
-
-    if (targetArch != kAdaArch) {
-        std::string ptx_str(reinterpret_cast<const char*>(ptx.data()), ptx.size());
-        size_t target_pos = ptx_str.find(".target sm_89");
-        if (target_pos != std::string::npos) {
-            std::string replacement = ".target " + targetPtx;
-            std::memcpy(ptx.data() + target_pos, replacement.data(), replacement.size());
-            LOG_INFO("AdaMFGUnlock: Rewrote PTX target sm_89 -> {} for GPU arch 0x{:X}",
-                     targetPtx, static_cast<uint32_t>(primaryGpu.nvidiaArchInfo.architecture_id));
-        }
-    }
-
     const std::string entry_signature = std::string(".entry ") + profile.entry_name + "(";
     const std::string parameter_name = std::string(profile.entry_name) + "_param_0";
     const std::string parameter_signature =
@@ -264,9 +237,6 @@ inline bool BuildTemporalFatbin(const uint8_t* fat, size_t fat_size,
     out.resize(final_size, 0);
     std::memcpy(out.data() + entry + hdr, patched.data(), patched.size());
 
-    // Update target architecture in fatbin entry header (offset +28)
-    std::memcpy(out.data() + entry + 28, &targetArch, sizeof(targetArch));
-
     const uint64_t payload64 = padded;
     const uint32_t zero32 = 0;
     const uint64_t zero64 = 0;
@@ -344,12 +314,36 @@ bool Manager::IsCeilingPatched() {
     return s_ceilingPatched.load(std::memory_order_relaxed);
 }
 
+bool Manager::IsSupportedGpu() {
+    const auto primaryGpu = IdentifyGpu::getPrimaryGpu();
+    // MFGAdaUnlock-RenoDx targets Ada. Do not rewrite the Ada temporal kernel
+    // for Turing/Ampere, nor claim that a non-NVIDIA adapter has real MFG.
+    return primaryGpu.vendorId == VendorId::Nvidia &&
+           primaryGpu.nvidiaArchInfo.architecture_id == NV_GPU_ARCHITECTURE_AD100;
+}
+
+bool Manager::IsReadyForMultiFrame() {
+    return IsSupportedGpu() && s_archPatched.load(std::memory_order_relaxed) &&
+           s_midpointPatched.load(std::memory_order_relaxed) &&
+           s_ceilingPatched.load(std::memory_order_relaxed) &&
+           s_ceilingEffective.load(std::memory_order_relaxed) > 1;
+}
+
 bool Manager::IsPacingReady() {
-    return s_flipMeteringPatched.load(std::memory_order_relaxed);
+    // Current Streamline providers use their native pacing. The legacy
+    // software-flip workaround is explicitly opt-in because forcing it in a
+    // provider that does not need it can cause exactly the black bars/freezes
+    // this fork is meant to avoid.
+    return !Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default() ||
+           s_flipMeteringPatched.load(std::memory_order_relaxed);
+}
+
+uint32_t Manager::GetCeilingCompiled() {
+    return s_ceilingCompiled.load(std::memory_order_relaxed);
 }
 
 uint32_t Manager::GetCeilingEffective() {
-    return s_ceilingEffective > 0 ? s_ceilingEffective : 5;
+    return s_ceilingPatched.load(std::memory_order_relaxed) ? s_ceilingEffective.load(std::memory_order_relaxed) : 0;
 }
 
 bool Manager::ModuleContains(HMODULE mod, const char* needle, size_t needle_len) {
@@ -404,7 +398,7 @@ bool Manager::IsDlssgProvider(HMODULE mod) {
 }
 
 bool Manager::PatchArchGatesInModule(HMODULE mod) {
-    if (!mod || s_archPatched.load()) return false;
+    if (!mod || s_archPatched.load() || !IsSupportedGpu()) return false;
 
     auto* base = reinterpret_cast<uint8_t*>(mod);
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
@@ -412,18 +406,7 @@ bool Manager::PatchArchGatesInModule(HMODULE mod) {
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
 
-    auto primaryGpu = IdentifyGpu::getPrimaryGpu();
-    uint8_t kArchNew = 0x90; // Ada 0x190 by default (matching ReShade exactly)
-    if (primaryGpu.vendorId == VendorId::Nvidia) {
-        if (primaryGpu.nvidiaArchInfo.architecture_id == NV_GPU_ARCHITECTURE_TU100) {
-            kArchNew = 0x60; // Turing 0x160
-        } else if (primaryGpu.nvidiaArchInfo.architecture_id < NV_GPU_ARCHITECTURE_AD100 &&
-                   primaryGpu.nvidiaArchInfo.architecture_id >= NV_GPU_ARCHITECTURE_GA100) {
-            kArchNew = 0x70; // Ampere 0x170
-        } else {
-            kArchNew = 0x90; // Ada 0x190
-        }
-    }
+    constexpr uint8_t kArchNew = 0x90; // Ada 0x190
     constexpr uint8_t kArchOld = 0xB0; // Blackwell
 
     std::vector<uint8_t*> found;
@@ -632,8 +615,8 @@ bool Manager::PatchFrameCountCeiling(HMODULE mod) {
     s_ceilingSite = found;
     s_ceilingOriginal = found[1];
     s_ceilingCmovOriginal = found[9];
-    s_ceilingCompiled = found[1];
-    s_ceilingEffective = s_ceilingCompiled;
+    s_ceilingCompiled.store(found[1], std::memory_order_relaxed);
+    s_ceilingEffective.store(s_ceilingCompiled.load(std::memory_order_relaxed), std::memory_order_relaxed);
 
     // cmovb edx, ecx -> cmovb edx, edx (0x0F 0x42 0xD2)
     // Preserves the plugin's own compiled ceiling (3 for older plugins, 5 for newer)
@@ -645,7 +628,7 @@ bool Manager::PatchFrameCountCeiling(HMODULE mod) {
     FlushInstructionCache(GetCurrentProcess(), found, 10);
     s_ceilingPatched.store(true);
     LOG_INFO("AdaMFGUnlock: Uncapped DLSS-G frame count ceiling (compiled={}, effective={}) via cmovb edx, edx!",
-             s_ceilingCompiled, s_ceilingEffective);
+             s_ceilingCompiled.load(std::memory_order_relaxed), s_ceilingEffective.load(std::memory_order_relaxed));
     return true;
 }
 
@@ -765,7 +748,7 @@ bool Manager::PatchFlipMeteringInModule(HMODULE mod) {
 }
 
 bool Manager::PatchNvngxDlssg(HMODULE dlssgModule) {
-    if (!dlssgModule || !s_enabled.load()) return false;
+    if (!dlssgModule || !s_enabled.load() || !IsSupportedGpu()) return false;
     bool archOk = PatchArchGatesInModule(dlssgModule);
     bool midOk = PatchMidpointInModule(dlssgModule);
     return archOk || midOk;
@@ -773,7 +756,21 @@ bool Manager::PatchNvngxDlssg(HMODULE dlssgModule) {
 
 bool Manager::PatchDlssgPlugin(HMODULE pluginModule) {
     if (!pluginModule || !s_enabled.load()) return false;
-    return PatchFlipMeteringInModule(pluginModule);
+
+    // Do not scan arbitrary loaded DLLs for a short instruction sequence. The
+    // Streamline DLSS-G plugin carries this diagnostic marker across the
+    // supported provider builds and it is the same identity check used by the
+    // legacy flip-metering path.
+    constexpr char kFlipMarker[] = "FG1 DLL has been detected";
+    if (!ModuleContains(pluginModule, kFlipMarker, sizeof(kFlipMarker) - 1)) return false;
+
+    // The ceiling bypass is required even when native pacing is used. The
+    // previous implementation only patched flip metering, which left the
+    // provider silently clamping every request to x2.
+    const bool ceilingPatched = PatchFrameCountCeiling(pluginModule);
+    const bool flipPatched = Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default() &&
+                             PatchFlipMeteringInModule(pluginModule);
+    return ceilingPatched || flipPatched;
 }
 
 void Manager::OnModuleLoaded(HMODULE mod, const wchar_t* path) {
@@ -798,8 +795,7 @@ void Manager::OnModuleLoaded(HMODULE mod, const wchar_t* path) {
             lower.find(L"/models/dlssg/") != std::wstring::npos) {
             PatchNvngxDlssg(mod);
         } else if (lower.find(L"sl.dlss_g") != std::wstring::npos ||
-                   lower.find(L"sl_dlss_g") != std::wstring::npos ||
-                   !s_flipMeteringPatched.load()) {
+                   lower.find(L"sl_dlss_g") != std::wstring::npos) {
             PatchDlssgPlugin(mod);
         }
     }
@@ -815,13 +811,15 @@ void Manager::CheckAndPatchAll() {
         if (dlssg) PatchNvngxDlssg(dlssg);
     }
 
-    if (!s_flipMeteringPatched.load()) {
+    if (!s_ceilingPatched.load() ||
+        (Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default() && !s_flipMeteringPatched.load())) {
         HMODULE plugin = GetModuleHandleW(L"sl.dlss_g.dll");
         if (plugin) PatchDlssgPlugin(plugin);
     }
 
     // If any component is still not patched, scan all loaded process modules (handles OTA hashed DLL names)
-    if (!s_flipMeteringPatched.load() || !s_archPatched.load() || !s_midpointPatched.load()) {
+    if (!s_ceilingPatched.load() || !s_archPatched.load() || !s_midpointPatched.load() ||
+        (Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default() && !s_flipMeteringPatched.load())) {
         HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
         if (snap != INVALID_HANDLE_VALUE) {
             MODULEENTRY32W me = {};
@@ -834,7 +832,9 @@ void Manager::CheckAndPatchAll() {
                         PatchNvngxDlssg(me.hModule);
                     }
 
-                    if (!s_flipMeteringPatched.load()) {
+                    if (!s_ceilingPatched.load() ||
+                        (Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default() &&
+                         !s_flipMeteringPatched.load())) {
                         PatchDlssgPlugin(me.hModule);
                     }
                 } while (Module32NextW(snap, &me));
@@ -888,6 +888,10 @@ void Manager::RestoreAll() {
         s_ceilingSite = nullptr;
         s_ceilingPatched.store(false);
     }
+    s_ceilingOriginal = 0;
+    s_ceilingCmovOriginal = 0;
+    s_ceilingCompiled.store(0, std::memory_order_relaxed);
+    s_ceilingEffective.store(0, std::memory_order_relaxed);
 }
 
 } // namespace AdaMFGUnlock

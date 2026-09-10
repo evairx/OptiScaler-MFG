@@ -273,9 +273,6 @@ class Config
     CustomOptional<uint32_t> DLSSDRenderPresetPerformance { 0 };
     CustomOptional<uint32_t> DLSSDRenderPresetUltraPerformance { 0 };
 
-    // Nukems
-    CustomOptional<bool> NvngxFGMakeDepthCopy { false };
-
     // Libraries
     CustomOptional<std::wstring, NoDefault> MainDllPath;
     CustomOptional<std::wstring, NoDefault> FfxDx12Path;
@@ -512,7 +509,6 @@ class Config
     // Frame Generation
     CustomOptional<FGInput> FGInput { FGInput::NoFG };
     CustomOptional<FGOutput> FGOutput { FGOutput::NoFG };
-    CustomOptional<FGNvngxReplacement> FGNvngxReplacement { FGNvngxReplacement::None };
     CustomOptional<bool> FGDrawUIOverFG { false };
     CustomOptional<bool> FGUIPremultipliedAlpha { true };
     CustomOptional<bool> FGDisableHudless { false };
@@ -599,7 +595,7 @@ class Config
     CustomOptional<bool> FGXeFGForceBorderless { false };
 
     // DLSSG
-    CustomOptional<bool> FGDLSSGUnlockAdaMFG { true };          // Unlocks Native NVIDIA Ada Multi-Frame Gen (3X/4X/6X)
+    CustomOptional<bool> FGDLSSGUnlockAdaMFG { false };         // Opt-in real NVIDIA Ada (RTX 40) MFG unlock
     CustomOptional<bool> FGDLSSGQualityGuard { true };          // Quality Guard: filters mismatched HUD separation in 3X/4X to prevent flickering
     CustomOptional<bool> FGDLSSGForceFlipMeteringOff { false };  // Force legacy software flip pacing (only enable if presentation freezes)
     CustomOptional<int> FGDLSSGInterpolationCount { 1 };        // For Opti's own SL instance
@@ -610,12 +606,6 @@ class Config
     CustomOptional<bool> FGDLSSGOverrideForceDMFG { false };   // Overrides game's DLSSG mode to Dynamic
     CustomOptional<bool> FGDLSSGForceDMFG { false };           // Overrides Opti's DLSSG mode to Dynamic
     CustomOptional<float> FGDLSSGFramerateTargetDMFG { 0.0f }; // 0.0 means auto-detects the display refresh rate
-
-    // As per
-    // https://github.com/artur-graniszewski/dlss-enabler-main/blob/a92464d468eb0d91ae17befa66c6bf6229f20b9f/Utils/DlssgProxy.cpp#L1033
-    CustomOptional<uint32_t> NvngxFGDispatchFlags { 0x10000000 }; // IGNORE_UI_TEXTURE
-    CustomOptional<bool> NvngxFGShowDebug { false };
-    CustomOptional<bool> NvngxFGDisableHudless { false };
 
     // fakenvapi
     CustomOptional<bool> UseFakenvapi { true };

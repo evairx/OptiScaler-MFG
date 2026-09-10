@@ -41,7 +41,7 @@ static bool CheckForFGStatus()
     // if (!Config::Instance()->OverlayMenu.value_or_default())
     //    return false;
 
-    if (State::Instance().activeFgInput == FGInput::NoFG || State::Instance().activeFgInput == FGInput::NvngxFG)
+    if (State::Instance().activeFgInput == FGInput::NoFG)
         return false;
 
     // Disable FG if amd dll is not found
@@ -76,8 +76,6 @@ static bool CheckForFGStatus()
         Config::Instance()->FGOutput.set_volatile_value(FGOutput::NoFG);
         State::Instance().activeFgOutput = Config::Instance()->FGOutput.value_or_default();
 
-        Config::Instance()->FGNvngxReplacement.set_volatile_value(FGNvngxReplacement::None);
-        State::Instance().activeFgNvngx = Config::Instance()->FGNvngxReplacement.value_or_default();
     }
 
     if (State::Instance().activeFgOutput == FGOutput::NoFG)

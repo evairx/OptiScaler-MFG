@@ -622,8 +622,7 @@ inline static VkResult hkvkEnumerateDeviceExtensionProperties(VkPhysicalDevice p
         // Count query, modify and add 5 to final count
         if (pProperties == nullptr && pPropertyCount != nullptr && count == 0)
         {
-            if (State::Instance().activeFgInput == FGInput::DLSSG ||
-                State::Instance().activeFgInput == FGInput::NvngxFG)
+            if (State::Instance().activeFgInput == FGInput::DLSSG)
                 *pPropertyCount += 7;
             else
                 *pPropertyCount += 5;
@@ -659,8 +658,7 @@ inline static VkResult hkvkEnumerateDeviceExtensionProperties(VkPhysicalDevice p
                                         VK_EXT_BUFFER_DEVICE_ADDRESS_SPEC_VERSION };
             memcpy(&pProperties[*pPropertyCount - 5], &bda, sizeof(VkExtensionProperties));
 
-            if (State::Instance().activeFgInput == FGInput::DLSSG ||
-                State::Instance().activeFgInput == FGInput::NvngxFG)
+            if (State::Instance().activeFgInput == FGInput::DLSSG)
             {
                 VkExtensionProperties of { VK_NV_OPTICAL_FLOW_EXTENSION_NAME, VK_NV_OPTICAL_FLOW_SPEC_VERSION };
                 memcpy(&pProperties[*pPropertyCount - 6], &of, sizeof(VkExtensionProperties));
@@ -680,7 +678,7 @@ inline static VkResult hkvkEnumerateDeviceExtensionProperties(VkPhysicalDevice p
         vkEnumerateDeviceExtensionPropertiesListed = true;
 
         auto minusCount = 5;
-        if (State::Instance().activeFgInput == FGInput::DLSSG || State::Instance().activeFgInput == FGInput::NvngxFG)
+        if (State::Instance().activeFgInput == FGInput::DLSSG)
             minusCount = 7;
 
         LOG_DEBUG("Extensions returned:");
