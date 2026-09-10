@@ -3487,6 +3487,88 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 ImGui::TextColored(toneMapColor(ImVec4(0.0f, 1.0f, 0.25f, 1.0f)),
                                    "MFG is active and running on Tensor Cores.");
                 ImGui::Spacing();
+
+                // Multi-Frame Variants / Multiplier (2X to 6X)
+                const char* ratioModes[] = {
+                    "Default (Game)",
+                    "2X (1 extra frame)",
+                    "3X (2 extra frames)",
+                    "4X (3 extra frames)",
+                    "5X (4 extra frames)",
+                    "6X (5 extra frames)"
+                };
+
+                int currentRatio = 0; // Default
+                if (config->FGDLSSGOverrideInterpolationCount.has_value())
+                {
+                    currentRatio = config->FGDLSSGOverrideInterpolationCount.value();
+                }
+                else if (config->FGDLSSGInterpolationCount.has_value() && config->FGDLSSGInterpolationCount.value() >= 1)
+                {
+                    currentRatio = config->FGDLSSGInterpolationCount.value();
+                }
+
+                if (currentRatio < 0 || currentRatio >= 6)
+                    currentRatio = 0;
+
+                ImGui::PushItemWidth(175.0f * menuResScale);
+                if (ImGui::BeginCombo("Multi-Frame Ratio", ratioModes[currentRatio]))
+                {
+                    for (int i = 0; i < 6; i++)
+                    {
+                        if (ImGui::Selectable(ratioModes[i], currentRatio == i))
+                        {
+                            if (i == 0)
+                            {
+                                config->FGDLSSGOverrideInterpolationCount.reset();
+                                config->FGDLSSGInterpolationCount = 1;
+                            }
+                            else
+                            {
+                                int extraFrames = i; // 1 -> 2X, 2 -> 3X, 3 -> 4X, 4 -> 5X, 5 -> 6X
+                                config->FGDLSSGOverrideInterpolationCount = extraFrames;
+                                config->FGDLSSGInterpolationCount = extraFrames;
+                                LOG_DEBUG("DLSSG Interpolation Count set to: {}", extraFrames);
+                            }
+                            StreamlineHooks::updateDlssgOptions();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::PopItemWidth();
+                ShowHelpMarker("Select multi-frame generation multiplier (2X, 3X, 4X, 6X) running natively on Tensor Cores");
+
+                if (state.dlssgGameDMFGSupported && config->FGOutput != FGOutput::DLSSG)
+                {
+                    if (bool dynamicMFG = config->FGDLSSGOverrideForceDMFG.value_or_default();
+                        ImGui::Checkbox("Force Dynamic MFG", &dynamicMFG))
+                    {
+                        config->FGDLSSGOverrideForceDMFG = dynamicMFG;
+                        StreamlineHooks::updateDlssgOptions();
+                    }
+
+                    ImGui::BeginDisabled(state.dlssgLastSetMode != sl::DLSSGMode::eDynamic);
+                    static float fpsTarget = config->FGDLSSGFramerateTargetDMFG.value_or_default();
+                    ImGui::SliderFloat("DMFG FPS Target", &fpsTarget, 0, 200, "%.0f");
+
+                    ShowHelpMarker("An active limit of 0 means auto-detect the display refresh rate");
+
+                    if (ImGui::Button("Apply Target"))
+                    {
+                        config->FGDLSSGFramerateTargetDMFG = fpsTarget;
+                        StreamlineHooks::updateDlssgOptions();
+                    }
+
+                    ImGui::SameLine(0.0f, 16.0f);
+
+                    if (ImGui::Button("Reset Target"))
+                    {
+                        fpsTarget = 0.0f;
+                        config->FGDLSSGFramerateTargetDMFG.reset();
+                    }
+
+                    ImGui::EndDisabled();
+                }
             }
             else if (!disableUnlockMfg)
             {
