@@ -68,7 +68,13 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        $version = "v10.0.1"
+        if ($env:GITHUB_REF_NAME -eq 'feat/mfg-turing-ampere') {
+            $version = "v10.0.1-final"
+        } elseif ($env:GITHUB_REF_NAME -eq 'feat/optifg-mfg-unification') {
+            $version = "v10.0.1-pre-optifg-test"
+        } else {
+            $version = "v10.0.1"
+        }
         
         # Get the current date in a specific format (e.g., YYYYMMDD)
         $date = Get-Date -Format "yyyyMMdd"
@@ -120,8 +126,8 @@ jobs:
         tag_name: ${{ steps.get_version.outputs.version }}
         name: OptiScaler-MFG ${{ steps.get_version.outputs.version }}
         body_path: RELEASE_NOTES.md
-        draft: false
-        prerelease: true
+        draft: true
+        prerelease: false
         files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

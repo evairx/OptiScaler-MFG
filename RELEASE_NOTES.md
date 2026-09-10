@@ -1,13 +1,15 @@
-# OptiScaler-MFG v10.0.1 (Pre-release)
+# OptiScaler-MFG v10.0.1-final
 
-Welcome to the pre-release of **OptiScaler-MFG (v10.0.1)**! 🚀 🎮
+Welcome to **OptiScaler-MFG (v10.0.1-final)**! 🚀 🎮
 
-This release introduces **Unified Intelligent GPU Architecture Detection** for Multi-Frame Generation across all modern NVIDIA RTX GPUs:
-- **RTX 40 Series (Ada Lovelace)**: Runs on the native in-memory Blackwell retargeting engine (2X to 6X).
-- **RTX 30 Series (Ampere)**: Automatically routes to the optimized SM86 PTX JIT engine (2X to 4X) with zero input delay and exact sampling.
-- **RTX 20 Series (Turing)**: Automatically routes to the optimized SM75 PTX JIT engine (2X to 4X) without visual bugs.
-
-A single, intelligent **"Unlock MFG"** button in the OptiScaler menu identifies your hardware and routes to the optimal path automatically!
+This release represents the complete unification of **Intelligent Multi-Frame Generation across all modern NVIDIA RTX GPUs (RTX 20, RTX 30, RTX 40)** and **OptiFG Multi-Frame Generation** for games without native FG:
+- **Intelligent GPU Architecture Detection**: Automatically routes Ada Lovelace (RTX 40) to the Blackwell in-memory retargeting engine (2X to 6X), Ampere (RTX 30) to the SM86 engine (2X to 4X), and Turing (RTX 20) to the SM75 engine (2X to 4X).
+- **OptiFG with Native NVIDIA DLSS MFG**: Multi-frame generation injection for games without native FG (e.g. *Running Train*), executing directly on NVIDIA Tensor Cores with zero FSR underneath.
+- **Zero Black Flickering**: Perfectly aligned swapchain backbuffers eliminating unrendered black frames.
+- **VSync Decoupling & Fluid Pacing**: Automatically decouples swapchain presentation from monitor refresh rate caps when Frame Generation is active.
+- **Reflex Sleep Stall Removal**: Unlocks full base render framerate and eliminates presentation thread microstutter.
+- **Accurate In-Game Overlay**: Displays correct `Total FPS / Base FPS` with precise frame times.
+- **Full Architecture Support**: Complete support for RTX 40 (2X-6X), RTX 30 (2X-4X), and RTX 20 (2X-4X).
 
 ---
 

@@ -2,7 +2,8 @@
 #include "FrameLimit.h"
 
 #include "Config.h"
-// #include "hooks/D3D11Hooks.h"
+#include "State.h"
+#include "framegen/IFGFeature.h"
 
 inline uint64_t FrameLimit::get_timestamp()
 {
@@ -68,7 +69,17 @@ void FrameLimit::sleep(bool fgActive)
         uint64_t min_interval_us = std::clamp((uint64_t) (1'000'000 / fpsCap), 0ULL, 100'000'000ULL);
 
         if (fgActive)
-            min_interval_us *= 2;
+        {
+            int mult = 2;
+            if (State::Instance().activeFgOutput == FGOutput::DLSSG)
+                mult = State::Instance().dlssgDetectedInterpolationCount + 1;
+            else if (State::Instance().currentFG != nullptr)
+                mult = State::Instance().currentFG->GetInterpolatedFrameCount() + 1;
+            if (mult < 2)
+                mult = 2;
+
+            min_interval_us *= mult;
+        }
 
         static uint64_t previous_frame_time = 0;
         uint64_t current_time = get_timestamp();
