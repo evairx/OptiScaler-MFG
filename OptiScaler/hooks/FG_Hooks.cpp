@@ -1255,7 +1255,7 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
             // so base render rate is not capped to monitor refresh rate divided by multiplier.
             SyncInterval = 0;
 
-            if (state.SCAllowTearing && !state.realExclusiveFullscreen)
+            if (state.SCAllowTearing && !state.realExclusiveFullscreen && (explicitlyForced && !forceVsync))
             {
                 LOG_DEBUG("Adding DXGI_PRESENT_ALLOW_TEARING");
                 Flags |= DXGI_PRESENT_ALLOW_TEARING;

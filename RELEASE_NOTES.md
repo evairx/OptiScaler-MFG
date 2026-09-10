@@ -2,10 +2,11 @@
 
 Welcome to the dedicated test pre-release of **OptiScaler-MFG (v10.0.1-pre-optifg-test)**! 🚀 🎮
 
-This build specifically addresses and fixes **OptiFG Frame Generation pacing, swapchain VSync throttling, and overlay accuracy** in games without native FG (e.g. *Running Train*):
-- **Swapchain V-Sync Decoupling**: Automatically unlocks swapchain presentation (`SyncInterval = 0` + `DXGI_PRESENT_ALLOW_TEARING`) when Frame Generation is active unless explicitly forced ON by the user. Prevents fixed refresh displays (60Hz / 75Hz / 80Hz) from locking total output and collapsing base rendered FPS down to 10 FPS at 6X!
+This build specifically addresses and fixes **OptiFG Frame Generation pacing, elimination of black flickering / flashing, swapchain VSync decoupling, and overlay accuracy** in games without native FG (e.g. *Running Train*):
+- **Elimination of Black Flickering (Swapchain Buffer Alignment)**: Fixed rapid black strobe / flashing caused by swapchain buffer count mismatch and out-of-bounds array indexing in D3D12. DXGI swapchains now respect the game's native buffer count, ensuring all presented backbuffers have valid engine contents.
+- **Swapchain V-Sync Decoupling**: Automatically unlocks swapchain presentation (`SyncInterval = 0`) when Frame Generation is active unless explicitly forced ON by the user. Prevents fixed refresh displays (60Hz / 75Hz / 80Hz) from locking total output and collapsing base rendered FPS down to 10 FPS at 6X!
+- **Safe Presentation Flags**: Safeguards against invalid tearing flags on swapchains that don't support tearing, preventing `DXGI_ERROR_INVALID_CALL` dropped frames.
 - **Reflex Sleep Stall Removal**: Removed synchronous `ReflexSleep` calls inside `PresentEnd`, eliminating presentation thread sleep stalls that caused severe input latency and microstutter.
-- **Queue & Swapchain Backbuffer Expansion**: Ensures at least 5 backbuffers in the swapchain for multi-frame generation (3X, 4X, 6X), preventing DWM / GPU queue bubbles.
 - **Accurate FPS & Base FPS Overlay**: Fixed inverted display math in the in-game overlay. Correctly displays `Total FPS / Base FPS` with accurate frametimes per interpolated frame instead of dividing base framerate by multiplier.
 - **Full Architecture Support**: Retains complete Ada Lovelace (RTX 40), Ampere (RTX 30), and Turing (RTX 20) MFG engines.
 

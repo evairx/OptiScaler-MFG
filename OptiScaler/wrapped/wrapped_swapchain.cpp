@@ -433,7 +433,7 @@ static HRESULT LocalPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
             // Decouple swapchain presentation from VSync when Frame Generation is active
             SyncInterval = 0;
 
-            if (State::Instance().SCAllowTearing && !State::Instance().realExclusiveFullscreen)
+            if (State::Instance().SCAllowTearing && !State::Instance().realExclusiveFullscreen && (explicitlyForced && !forceVsync))
             {
                 LOG_DEBUG("Adding DXGI_PRESENT_ALLOW_TEARING");
                 Flags |= DXGI_PRESENT_ALLOW_TEARING;

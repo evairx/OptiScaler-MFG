@@ -158,8 +158,6 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
     StreamlineProxy::SetFeatureLoaded()(sl::kFeatureDLSS_G, true);
 
     desc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-    if (desc->BufferCount < 5)
-        desc->BufferCount = 5;
 
     auto result = S_FALSE;
 
@@ -282,8 +280,6 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
         StreamlineProxy::SetFeatureLoaded()(sl::kFeatureDLSS_G, true);
 
         desc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-        if (desc->BufferCount < 5)
-            desc->BufferCount = 5;
         auto result = factory2->CreateSwapChainForHwnd(cmdQueue, hwnd, desc, pFullscreenDesc, nullptr, swapChain);
 
         factory2->Release();
@@ -455,8 +451,6 @@ bool DLSSG_Dx12::Dispatch()
     options.mode = sl::DLSSGMode::eOn;
     options.numFramesToGenerate = _framesToInterpolate;
     options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
-    options.numBackBuffers = State::Instance().currentSwapchainDesc.BufferCount > 0 ?
-                             State::Instance().currentSwapchainDesc.BufferCount : 5;
 
     if (Config::Instance()->FGDLSSGForceDMFG.value_or_default() && _supportsDMFG)
     {
