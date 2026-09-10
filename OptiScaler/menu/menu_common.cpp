@@ -3136,7 +3136,6 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
 
     // clang-format on
 
-    const auto& primaryGpu = IdentifyGpu::getPrimaryGpu();
     const uint32_t archId = static_cast<uint32_t>(primaryGpu.nvidiaArchInfo.architecture_id);
     const bool isAda = (archId >= 0x00000190) || (primaryGpu.name.find("RTX 40") != std::string::npos);
     const bool isAmpere = AmpereMfgLoader::IsAmpereArch(archId) || (primaryGpu.name.find("RTX 30") != std::string::npos);
@@ -4222,7 +4221,6 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
             }
         }
 
-        const auto& primaryGpu = IdentifyGpu::getPrimaryGpu();
         const uint32_t archId = static_cast<uint32_t>(primaryGpu.nvidiaArchInfo.architecture_id);
         const bool isAda = (archId >= 0x00000190) || (primaryGpu.name.find("RTX 40") != std::string::npos);
         const bool isAmpere = AmpereMfgLoader::IsAmpereArch(archId) || (primaryGpu.name.find("RTX 30") != std::string::npos);
