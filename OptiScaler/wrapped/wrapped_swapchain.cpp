@@ -414,14 +414,23 @@ static HRESULT LocalPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
     }
 
     // Fallback when FGPresent is not hooked for V-sync
-    if (willPresent && Config::Instance()->ForceVsync.has_value())
+    if (willPresent)
     {
-        LOG_DEBUG("ForceVsync: {}, VsyncInterval: {}, SCAllowTearing: {}, realExclusiveFullscreen: {}",
-                  Config::Instance()->ForceVsync.value(), Config::Instance()->VsyncInterval.value_or_default(),
-                  State::Instance().SCAllowTearing, State::Instance().realExclusiveFullscreen);
+        bool forceVsync = Config::Instance()->ForceVsync.value_or_default(false);
+        bool explicitlyForced = Config::Instance()->ForceVsync.has_value();
 
-        if (!Config::Instance()->ForceVsync.value())
+        if (explicitlyForced && forceVsync)
         {
+            SyncInterval = Config::Instance()->VsyncInterval.value_or_default();
+            if (SyncInterval < 1)
+                SyncInterval = 1;
+
+            LOG_DEBUG("Removing DXGI_PRESENT_ALLOW_TEARING");
+            Flags &= ~DXGI_PRESENT_ALLOW_TEARING;
+        }
+        else if ((fg != nullptr && fg->IsActive() && !fg->IsPaused()) || (explicitlyForced && !forceVsync))
+        {
+            // Decouple swapchain presentation from VSync when Frame Generation is active
             SyncInterval = 0;
 
             if (State::Instance().SCAllowTearing && !State::Instance().realExclusiveFullscreen)
@@ -429,17 +438,6 @@ static HRESULT LocalPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
                 LOG_DEBUG("Adding DXGI_PRESENT_ALLOW_TEARING");
                 Flags |= DXGI_PRESENT_ALLOW_TEARING;
             }
-        }
-        else
-        {
-            // Remove allow tearing
-            SyncInterval = Config::Instance()->VsyncInterval.value_or_default();
-
-            if (SyncInterval < 1)
-                SyncInterval = 1;
-
-            LOG_DEBUG("Removing DXGI_PRESENT_ALLOW_TEARING");
-            Flags &= ~DXGI_PRESENT_ALLOW_TEARING;
         }
 
         LOG_DEBUG("Final SyncInterval: {}", SyncInterval);

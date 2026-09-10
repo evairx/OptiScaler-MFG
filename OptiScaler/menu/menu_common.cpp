@@ -1899,20 +1899,24 @@ void MenuCommon::RenderPerformanceOverlay(RenderMenuContext& ctx)
 
             if (fg != nullptr && fg->IsActive() && !fg->IsPaused())
             {
-                const double baseFps = frameRate / (double) (fg->GetInterpolatedFrameCount() + 1);
+                const double mult = (double) (fg->GetInterpolatedFrameCount() + 1);
+                const double baseFps = frameRate;
+                const double totalFps = frameRate * mult;
+                const double displayFrameTime = frameTime > 0.0 ? (frameTime / mult) : 0.0;
 
                 switch (overlayType)
                 {
                 case FpsOverlay_JustFPS:
-                    fpsPart = StrFmt("%6.1f/%5.1f ", frameRate, baseFps);
+                    fpsPart = StrFmt("%6.1f/%5.1f ", totalFps, baseFps);
                     break;
 
                 case FpsOverlay_Simple:
-                    fpsPart = StrFmt("FPS: %6.1f/%5.1f, %7.2f ms", frameRate, baseFps, frameTime);
+                    fpsPart = StrFmt("FPS: %6.1f/%5.1f, %7.2f ms", totalFps, baseFps, displayFrameTime);
                     break;
 
                 default:
-                    fpsPart = StrFmt("FPS: %6.1f/%5.1f, Avg: %6.1f", frameRate, baseFps, 1000.0f / averageFrameTime);
+                    fpsPart = StrFmt("FPS: %6.1f/%5.1f, Avg: %6.1f", totalFps, baseFps,
+                                     averageFrameTime > 0.0f ? ((1000.0f / averageFrameTime) * mult) : 0.0f);
                     break;
                 }
             }

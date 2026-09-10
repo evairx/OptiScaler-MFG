@@ -1,13 +1,13 @@
-# OptiScaler-MFG v10.0.1 (Pre-release)
+# OptiScaler-MFG v10.0.1-pre-optifg-test (Pre-release)
 
-Welcome to the pre-release of **OptiScaler-MFG (v10.0.1)**! 🚀 🎮
+Welcome to the dedicated test pre-release of **OptiScaler-MFG (v10.0.1-pre-optifg-test)**! 🚀 🎮
 
-This release introduces **Unified Intelligent GPU Architecture Detection** for Multi-Frame Generation across all modern NVIDIA RTX GPUs:
-- **RTX 40 Series (Ada Lovelace)**: Runs on the native in-memory Blackwell retargeting engine (2X to 6X).
-- **RTX 30 Series (Ampere)**: Automatically routes to the optimized SM86 PTX JIT engine (2X to 4X) with zero input delay and exact sampling.
-- **RTX 20 Series (Turing)**: Automatically routes to the optimized SM75 PTX JIT engine (2X to 4X) without visual bugs.
-
-A single, intelligent **"Unlock MFG"** button in the OptiScaler menu identifies your hardware and routes to the optimal path automatically!
+This build specifically addresses and fixes **OptiFG Frame Generation pacing, swapchain VSync throttling, and overlay accuracy** in games without native FG (e.g. *Running Train*):
+- **Swapchain V-Sync Decoupling**: Automatically unlocks swapchain presentation (`SyncInterval = 0` + `DXGI_PRESENT_ALLOW_TEARING`) when Frame Generation is active unless explicitly forced ON by the user. Prevents fixed refresh displays (60Hz / 75Hz / 80Hz) from locking total output and collapsing base rendered FPS down to 10 FPS at 6X!
+- **Reflex Sleep Stall Removal**: Removed synchronous `ReflexSleep` calls inside `PresentEnd`, eliminating presentation thread sleep stalls that caused severe input latency and microstutter.
+- **Queue & Swapchain Backbuffer Expansion**: Ensures at least 5 backbuffers in the swapchain for multi-frame generation (3X, 4X, 6X), preventing DWM / GPU queue bubbles.
+- **Accurate FPS & Base FPS Overlay**: Fixed inverted display math in the in-game overlay. Correctly displays `Total FPS / Base FPS` with accurate frametimes per interpolated frame instead of dividing base framerate by multiplier.
+- **Full Architecture Support**: Retains complete Ada Lovelace (RTX 40), Ampere (RTX 30), and Turing (RTX 20) MFG engines.
 
 ---
 

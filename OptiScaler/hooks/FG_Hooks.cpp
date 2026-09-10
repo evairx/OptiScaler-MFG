@@ -1235,14 +1235,24 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
         Hudfix_Dx12::PresentStart();
     }
 
-    if (willPresent && config->ForceVsync.has_value())
+    if (willPresent)
     {
-        LOG_DEBUG("ForceVsync: {}, VsyncInterval: {}, SCAllowTearing: {}, realExclusiveFullscreen: {}",
-                  config->ForceVsync.value(), config->VsyncInterval.value_or_default(), state.SCAllowTearing,
-                  state.realExclusiveFullscreen);
+        bool forceVsync = config->ForceVsync.value_or_default(false);
+        bool explicitlyForced = config->ForceVsync.has_value();
 
-        if (!config->ForceVsync.value())
+        if (explicitlyForced && forceVsync)
         {
+            SyncInterval = config->VsyncInterval.value_or_default();
+            if (SyncInterval < 1)
+                SyncInterval = 1;
+
+            LOG_DEBUG("Removing DXGI_PRESENT_ALLOW_TEARING");
+            Flags &= ~DXGI_PRESENT_ALLOW_TEARING;
+        }
+        else if (fgFeatureActive || (explicitlyForced && !forceVsync))
+        {
+            // Decouple swapchain presentation from VSync when Frame Generation is active
+            // so base render rate is not capped to monitor refresh rate divided by multiplier.
             SyncInterval = 0;
 
             if (state.SCAllowTearing && !state.realExclusiveFullscreen)
@@ -1250,16 +1260,6 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
                 LOG_DEBUG("Adding DXGI_PRESENT_ALLOW_TEARING");
                 Flags |= DXGI_PRESENT_ALLOW_TEARING;
             }
-        }
-        else
-        {
-            SyncInterval = config->VsyncInterval.value_or_default();
-
-            if (SyncInterval < 1)
-                SyncInterval = 1;
-
-            LOG_DEBUG("Removing DXGI_PRESENT_ALLOW_TEARING");
-            Flags &= ~DXGI_PRESENT_ALLOW_TEARING;
         }
 
         LOG_DEBUG("Final SyncInterval: {}", SyncInterval);
@@ -1292,11 +1292,9 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
         if (StreamlineProxy::PCLSetMarker() != nullptr)
             StreamlineProxy::PCLSetMarker()(sl::PCLMarker::ePresentEnd, *localToken);
 
-        if (StreamlineProxy::ReflexSleep() != nullptr)
-        {
-            LOG_DEBUG("Calling ReflexSleep");
-            StreamlineProxy::ReflexSleep()(*localToken);
-        }
+        // Do not call ReflexSleep at PresentEnd:
+        // Calling slReflexSleep at PresentEnd stalls the presentation thread and can throttle
+        // base frame pacing down to monitor refresh rate divided by multiplier.
     }
 
     if (state.swapchainInteropApi == SwapchainInteropApi::None)

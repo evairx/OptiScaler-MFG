@@ -68,7 +68,11 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        $version = "v10.0.1"
+        if ($env:GITHUB_REF_NAME -eq 'feat/optifg-mfg-unification') {
+            $version = "v10.0.1-pre-optifg-test"
+        } else {
+            $version = "v10.0.1"
+        }
         
         # Get the current date in a specific format (e.g., YYYYMMDD)
         $date = Get-Date -Format "yyyyMMdd"
