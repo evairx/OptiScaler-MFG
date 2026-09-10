@@ -179,7 +179,7 @@ class State
     FGOutput activeFgOutput = FGOutput::NoFG;
     // This should be set to a non-None value only if all other requirements are met and nvngx can be used
     FGNvngxReplacement activeFgNvngx = FGNvngxReplacement::None;
-    bool activeUnlockAdaMFG = false;
+    bool activeUnlockAdaMFG = true;
 
     // Streamline FG inputs
     Sl_Inputs_Dx12 slFGInputs = {};

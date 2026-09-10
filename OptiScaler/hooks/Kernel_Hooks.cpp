@@ -17,6 +17,7 @@
 #include "Hook_Utils.h"
 
 #include "Amdxc64_Hooks.h"
+#include <framegen/dlssg/AdaMFGUnlock.h>
 #pragma intrinsic(_ReturnAddress)
 
 static inline void NormalizePath(std::string& path)
@@ -335,7 +336,12 @@ HMODULE KernelHooks::hk_K32_LoadLibraryW(LPCWSTR lpLibFileName)
     if (result != nullptr)
         return result;
 
-    return o_K32_LoadLibraryW(lpLibFileName);
+    result = o_K32_LoadLibraryW(lpLibFileName);
+    if (result != nullptr && !State::Instance().isShuttingDown)
+    {
+        AdaMFGUnlock::Manager::OnModuleLoaded(result, lpLibFileName);
+    }
+    return result;
 }
 
 VALIDATE_HOOK(hk_K32_LoadLibraryA, Kernel32Proxy::PFN_LoadLibraryA)
@@ -356,7 +362,12 @@ HMODULE KernelHooks::hk_K32_LoadLibraryA(LPCSTR lpLibFileName)
     if (result != nullptr)
         return result;
 
-    return o_K32_LoadLibraryA(lpLibFileName);
+    result = o_K32_LoadLibraryA(lpLibFileName);
+    if (result != nullptr && !State::Instance().isShuttingDown)
+    {
+        AdaMFGUnlock::Manager::OnModuleLoaded(result, name.c_str());
+    }
+    return result;
 }
 
 VALIDATE_HOOK(hk_K32_LoadLibraryExW, Kernel32Proxy::PFN_LoadLibraryExW)
@@ -376,7 +387,14 @@ HMODULE KernelHooks::hk_K32_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, 
     if (result != nullptr)
         return result;
 
-    return o_K32_LoadLibraryExW(lpLibFileName, hFile, dwFlags);
+    result = o_K32_LoadLibraryExW(lpLibFileName, hFile, dwFlags);
+    constexpr DWORD kDataOnly = LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+                                LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+    if (result != nullptr && (dwFlags & kDataOnly) == 0 && !State::Instance().isShuttingDown)
+    {
+        AdaMFGUnlock::Manager::OnModuleLoaded(result, lpLibFileName);
+    }
+    return result;
 }
 
 VALIDATE_HOOK(hk_K32_LoadLibraryExA, Kernel32Proxy::PFN_LoadLibraryExA)
@@ -397,7 +415,14 @@ HMODULE KernelHooks::hk_K32_LoadLibraryExA(LPCSTR lpLibFileName, HANDLE hFile, D
     if (result != nullptr)
         return result;
 
-    return o_K32_LoadLibraryExA(lpLibFileName, hFile, dwFlags);
+    result = o_K32_LoadLibraryExA(lpLibFileName, hFile, dwFlags);
+    constexpr DWORD kDataOnly = LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+                                LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+    if (result != nullptr && (dwFlags & kDataOnly) == 0 && !State::Instance().isShuttingDown)
+    {
+        AdaMFGUnlock::Manager::OnModuleLoaded(result, name.c_str());
+    }
+    return result;
 }
 
 VALIDATE_HOOK(hk_KB_LoadLibraryExW, KernelBaseProxy::PFN_LoadLibraryExW)
@@ -417,7 +442,14 @@ HMODULE KernelHooks::hk_KB_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, D
     if (result != nullptr)
         return result;
 
-    return o_KB_LoadLibraryExW(lpLibFileName, hFile, dwFlags);
+    result = o_KB_LoadLibraryExW(lpLibFileName, hFile, dwFlags);
+    constexpr DWORD kDataOnly = LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+                                LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+    if (result != nullptr && (dwFlags & kDataOnly) == 0 && !State::Instance().isShuttingDown)
+    {
+        AdaMFGUnlock::Manager::OnModuleLoaded(result, lpLibFileName);
+    }
+    return result;
 }
 
 VALIDATE_HOOK(hk_K32_FreeLibrary, Kernel32Proxy::PFN_FreeLibrary)

@@ -599,8 +599,10 @@ class Config
     CustomOptional<bool> FGXeFGForceBorderless { false };
 
     // DLSSG
-    CustomOptional<bool> FGDLSSGUnlockAdaMFG { false };  // Unlocks Native NVIDIA Ada Multi-Frame Gen (3X/4X/6X)
-    CustomOptional<int> FGDLSSGInterpolationCount { 1 }; // For Opti's own SL instance
+    CustomOptional<bool> FGDLSSGUnlockAdaMFG { true };          // Unlocks Native NVIDIA Ada Multi-Frame Gen (3X/4X/6X)
+    CustomOptional<bool> FGDLSSGQualityGuard { true };          // Quality Guard: filters mismatched HUD separation in 3X/4X to prevent flickering
+    CustomOptional<bool> FGDLSSGForceFlipMeteringOff { false };  // Force legacy software flip pacing (only enable if presentation freezes)
+    CustomOptional<int> FGDLSSGInterpolationCount { 1 };        // For Opti's own SL instance
     CustomOptional<bool> FGDLSSGUseGamesReflexMarkers { true };
     CustomOptional<int, NoDefault>
         FGDLSSGOverrideInterpolationCount; // For overriding game's value sent to SL, could be Nvngx FG, could be noFG

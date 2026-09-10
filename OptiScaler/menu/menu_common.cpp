@@ -3515,6 +3515,13 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 ImGui::PopItemWidth();
                 ShowHelpMarker("Select multi-frame generation multiplier (2X, 3X, 4X, 6X) running natively on Tensor Cores");
 
+                bool qGuard = config->FGDLSSGQualityGuard.value_or_default();
+                if (ImGui::Checkbox("Quality Guard (Anti-Flicker)", &qGuard))
+                {
+                    config->FGDLSSGQualityGuard = qGuard;
+                }
+                ShowHelpMarker("Prevents flickering and ghosting in 3X/4X multi-frame modes by filtering incompatible HUD separation tags");
+
                 if (state.dlssgGameDMFGSupported && config->FGOutput != FGOutput::DLSSG)
                 {
                     if (bool dynamicMFG = config->FGDLSSGOverrideForceDMFG.value_or_default();

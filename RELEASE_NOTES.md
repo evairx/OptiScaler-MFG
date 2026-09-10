@@ -1,4 +1,4 @@
-﻿# OptiScaler-MFG v10.0.0-evairx
+# OptiScaler-MFG v10.0.0-evairx
 
 Welcome to the initial release of **OptiScaler-MFG (v10.0.0-evairx)**! 🎉 🎉 🎉
 
@@ -11,12 +11,22 @@ Always check the instructions below for compatibility and configuration details.
 ### 🌟 Major Highlights & New Features
 
 #### 🚀 Native DLSS Multi-Frame Generation on Tensor Cores (RTX 20 / RTX 30 / RTX 40)
+- **Definitive Multi-Frame Architecture (2X, 3X, 4X, 5X, 6X)**:
+  - Fully incorporates and ports the ReShade `MFGAdaUnlock-RenoDx` engine directly into OptiScaler's native binary (`dxgi.dll`) without needing ReShade, external hooks, or sidecar add-ons.
+  - **Zero-Flicker Midpoint Temporal Reconstruction**:
+    - Decompresses Fatbin PTX and rewrites the interpolation kernel to inject dynamic temporal progress parameters (`%f134` and `%f136`) instead of the hardcoded `0.5f` midpoint constant.
+    - Eliminates stuttering, duplicate cadence frames, and judder in 3X, 4X, and 6X modes.
+  - **Quality Guard (Anti-Flicker & Halo Prevention)**:
+    - Automatically cleanses mismatched HUD-less / UI separation tags when multi-frame generation is active.
+    - Prevents UI tearing, halos, and flashing artifacts in Unreal Engine 5 games like *Black Myth: Wukong* and *Silent Hill 2*.
+  - **Instant Load-Time Interception**:
+    - Hooks into the Windows library loader (`Kernel32` / `KernelBase`) to patch `nvngx_dlssg.dll` and driver OTA models (`\models\dlssg\*.bin`) the very millisecond they are mapped into memory, before NGX can cache device capabilities.
+  - **Pacing Guard & History Synchronization**:
+    - Dynamically injects temporal history resets into Streamline (`slSetConstants` with `reset = eTrue`) upon switching multipliers, ensuring instantaneous and clean transitions.
+    - Integrated with NVIDIA Reflex pacing to keep frame delivery butter-smooth.
 - **Turing & Ampere Hardware Support (RTX 20 & RTX 30 series)**:
-  - Bypasses architecture locks in NVIDIA DLSS-G (`nvngx_dlssg.dll` and `sl.dlss_g.dll`) via runtime PTX instruction redirection and dynamic gate patching.
+  - Bypasses architecture locks in NVIDIA DLSS-G via runtime PTX instruction redirection and dynamic gate patching.
   - Multi-frame generation executes directly on hardware **Tensor Cores** with native performance and minimum latency.
-- **Ada Lovelace Multi-Frame Generation (RTX 40 series)**:
-  - Integrated `AdaMFGUnlock` unlocking multi-frame generation multipliers (**2X, 3X, 4X, 5X, 6X**).
-  - Dynamic Multi-Frame Generation (DMFG) support with customizable framerate targets.
 
 #### 🛠️ Seamless In-Game Menu & Flow
 - **Direct "Unlock MFG" Toggle**:

@@ -233,6 +233,8 @@ bool Config::Reload(std::filesystem::path iniPath)
                 FGDLSSGInterpolationCount.reset();
 
             FGDLSSGUnlockAdaMFG.set_from_config(readBool("DLSSG", "UnlockAdaMFG"));
+            FGDLSSGQualityGuard.set_from_config(readBool("DLSSG", "QualityGuard"));
+            FGDLSSGForceFlipMeteringOff.set_from_config(readBool("DLSSG", "ForceFlipMeteringOff"));
             FGDLSSGUseGamesReflexMarkers.set_from_config(readBool("DLSSG", "UseGamesReflexMarkers"));
 
             FGDLSSGOverrideInterpolationCount.set_from_config(readInt("DLSSG", "OverrideInterpolationCount"));
@@ -1009,6 +1011,10 @@ bool Config::SaveIni()
     {
         ini.SetValue("DLSSG", "UnlockAdaMFG",
                      GetBoolValue(Instance()->FGDLSSGUnlockAdaMFG.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "QualityGuard",
+                     GetBoolValue(Instance()->FGDLSSGQualityGuard.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "ForceFlipMeteringOff",
+                     GetBoolValue(Instance()->FGDLSSGForceFlipMeteringOff.value_for_config()).c_str());
         ini.SetValue("DLSSG", "InterpolationCount",
                      GetIntValue(Instance()->FGDLSSGInterpolationCount.value_for_config()).c_str());
         ini.SetValue("DLSSG", "UseGamesReflexMarkers",

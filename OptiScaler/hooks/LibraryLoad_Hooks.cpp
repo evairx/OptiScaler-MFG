@@ -127,7 +127,7 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
                 State::Instance().NGX_OTA_Dlssd = wstring_to_string(lpLibFullPath);
             }
 
-            if (normalizedPath.contains(L"\\dlssg\\"))
+            if (normalizedPath.contains(L"\\dlssg\\") || normalizedPath.contains(L"/dlssg/"))
             {
                 if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
                     AdaMFGUnlock::Manager::PatchNvngxDlssg(loadedBin);
@@ -145,6 +145,17 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
             AdaMFGUnlock::Manager::PatchNvngxDlssg(dlssgModule);
         }
         return dlssgModule;
+    }
+
+    // Direct sl.dlss_g.dll load
+    if (normalizedPath.contains(L"sl.dlss_g") || normalizedPath.contains(L"sl_dlss_g"))
+    {
+        auto pluginModule = NtdllProxy::LoadLibraryExW_Ldr(lpLibFullPath, NULL, 0);
+        if (pluginModule != nullptr && Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        {
+            AdaMFGUnlock::Manager::PatchDlssgPlugin(pluginModule);
+        }
+        return pluginModule;
     }
 
     // NvApi64.dll

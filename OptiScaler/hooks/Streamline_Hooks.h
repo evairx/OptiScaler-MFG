@@ -266,6 +266,9 @@ class StreamlineHooks
     static void* hkdlssg_slGetPluginFunction(const char* functionName);
     static const char* hkdlssg_slGetPluginJSONConfig_sl1();
 
+    // DLSSG Temporal Reset & Options State
+    inline static std::atomic_bool s_requestTemporalReset { false };
+
     // Local DLSSG
     inline static PFN_slGetPluginFunction o_local_dlssg_slGetPluginFunction = nullptr;
     inline static PFN_slOnPluginLoad o_local_dlssg_slOnPluginLoad = nullptr;

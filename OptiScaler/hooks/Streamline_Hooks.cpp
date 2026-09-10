@@ -427,6 +427,40 @@ sl::Result StreamlineHooks::hkslSetTag(const sl::ViewportHandle& viewport, const
         }
     }
 
+    const bool isMultiFrameActive = (lastDlssgOptions.numFramesToGenerate > 1) ||
+                                    (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value() &&
+                                     Config::Instance()->FGDLSSGOverrideInterpolationCount.value() > 1);
+
+    if (Config::Instance()->FGDLSSGQualityGuard.value_or_default() && isMultiFrameActive && numTags > 0 && tags != nullptr)
+    {
+        bool hasHudSeparation = false;
+        for (uint32_t i = 0; i < numTags; i++)
+        {
+            if (tags[i].type == sl::kBufferTypeHUDLessColor ||
+                tags[i].type == sl::kBufferTypeUIColorAndAlpha ||
+                tags[i].type == sl::kBufferTypeUIAlpha)
+            {
+                hasHudSeparation = true;
+                break;
+            }
+        }
+
+        if (hasHudSeparation)
+        {
+            std::vector<sl::ResourceTag> filteredTags(tags, tags + numTags);
+            for (auto& tag : filteredTags)
+            {
+                if (tag.type == sl::kBufferTypeHUDLessColor ||
+                    tag.type == sl::kBufferTypeUIColorAndAlpha ||
+                    tag.type == sl::kBufferTypeUIAlpha)
+                {
+                    tag.resource = nullptr;
+                }
+            }
+            return o_slSetTag(viewport, filteredTags.data(), numTags, cmdBuffer);
+        }
+    }
+
     auto result = o_slSetTag(viewport, tags, numTags, cmdBuffer);
     return result;
 }
@@ -504,6 +538,40 @@ sl::Result StreamlineHooks::hkslSetTagForFrame(const sl::FrameToken& frame, cons
         else if (State::Instance().activeFgInput == FGInput::NvngxFG)
         {
             LOG_TRACE("Tagging resource of type: {}", magic_enum::enum_name(typeEnum));
+        }
+    }
+
+    const bool isMultiFrameActive = (lastDlssgOptions.numFramesToGenerate > 1) ||
+                                    (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value() &&
+                                     Config::Instance()->FGDLSSGOverrideInterpolationCount.value() > 1);
+
+    if (Config::Instance()->FGDLSSGQualityGuard.value_or_default() && isMultiFrameActive && numResources > 0 && resources != nullptr)
+    {
+        bool hasHudSeparation = false;
+        for (uint32_t i = 0; i < numResources; i++)
+        {
+            if (resources[i].type == sl::kBufferTypeHUDLessColor ||
+                resources[i].type == sl::kBufferTypeUIColorAndAlpha ||
+                resources[i].type == sl::kBufferTypeUIAlpha)
+            {
+                hasHudSeparation = true;
+                break;
+            }
+        }
+
+        if (hasHudSeparation)
+        {
+            std::vector<sl::ResourceTag> filteredResources(resources, resources + numResources);
+            for (auto& tag : filteredResources)
+            {
+                if (tag.type == sl::kBufferTypeHUDLessColor ||
+                    tag.type == sl::kBufferTypeUIColorAndAlpha ||
+                    tag.type == sl::kBufferTypeUIAlpha)
+                {
+                    tag.resource = nullptr;
+                }
+            }
+            return o_slSetTagForFrame(frame, viewport, filteredResources.data(), numResources, cmdBuffer);
         }
     }
 
@@ -1050,6 +1118,14 @@ sl::Result StreamlineHooks::hkslSetConstants(const sl::Constants& values, const 
 
     State::Instance().slFGInputs.setConstants(values, (uint32_t) frame);
 
+    if (s_requestTemporalReset.exchange(false))
+    {
+        sl::Constants resetValues = values;
+        resetValues.reset = sl::Boolean::eTrue;
+        LOG_INFO("AdaMFGUnlock: Injected temporal history reset into Streamline for frame/multiplier transition");
+        return o_slSetConstants(resetValues, frame, viewport);
+    }
+
     return o_slSetConstants(values, frame, viewport);
 }
 
@@ -1193,9 +1269,38 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
         }
     }
 
+    static uint32_t s_lastInterpolationCount = 1;
+    static sl::DLSSGMode s_lastSetDlssgMode = sl::DLSSGMode::eOff;
+
+    if (newOptions.numFramesToGenerate != s_lastInterpolationCount || newOptions.mode != s_lastSetDlssgMode)
+    {
+        s_requestTemporalReset.store(true);
+        s_lastInterpolationCount = newOptions.numFramesToGenerate;
+        s_lastSetDlssgMode = newOptions.mode;
+    }
+
     state.dlssgLastSetMode = newOptions.mode;
 
-    return o_slDLSSGSetOptions(viewport, newOptions);
+    sl::Result result = o_slDLSSGSetOptions(viewport, newOptions);
+    if (result != sl::Result::eOk && newOptions.numFramesToGenerate > 1)
+    {
+        // DLSS-G can return eErrorFeatureManagerInvalidState on the first attempt when activating.
+        // Retry once before falling back.
+        result = o_slDLSSGSetOptions(viewport, newOptions);
+        if (result != sl::Result::eOk)
+        {
+            LOG_WARN("StreamlineHooks: slDLSSGSetOptions refused numFramesToGenerate={}, retrying fallback to 1", newOptions.numFramesToGenerate);
+            newOptions.numFramesToGenerate = 1;
+            result = o_slDLSSGSetOptions(viewport, newOptions);
+        }
+    }
+
+    if (result == sl::Result::eOk && dlssgPotentiallyActive)
+    {
+        ReflexHooks::setDlssgFrameCount(newOptions.numFramesToGenerate);
+    }
+
+    return result;
 }
 
 sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport, sl::DLSSGState& state,

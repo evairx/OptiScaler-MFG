@@ -344,6 +344,65 @@ bool Manager::IsCeilingPatched() {
     return s_ceilingPatched.load(std::memory_order_relaxed);
 }
 
+bool Manager::IsPacingReady() {
+    return s_flipMeteringPatched.load(std::memory_order_relaxed) || s_ceilingPatched.load(std::memory_order_relaxed);
+}
+
+uint32_t Manager::GetCeilingEffective() {
+    return s_ceilingEffective > 0 ? s_ceilingEffective : 5;
+}
+
+bool Manager::ModuleContains(HMODULE mod, const char* needle, size_t needle_len) {
+    if (!mod) return false;
+    auto* base = reinterpret_cast<uint8_t*>(mod);
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+    if (nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) return false;
+
+    const auto* section = IMAGE_FIRST_SECTION(nt);
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section) {
+        if ((section->Characteristics & IMAGE_SCN_MEM_READ) == 0) continue;
+        uint8_t* start = base + section->VirtualAddress;
+        const size_t size = section->Misc.VirtualSize;
+        if (size < needle_len) continue;
+        for (size_t off = 0; off + needle_len <= size; ++off) {
+            if (std::memcmp(start + off, needle, needle_len) == 0) return true;
+        }
+    }
+    return false;
+}
+
+bool Manager::HasKnownDlssgPath(HMODULE mod) {
+    if (!mod) return false;
+    wchar_t module_path[32768] = {};
+    const DWORD length = GetModuleFileNameW(mod, module_path, ARRAYSIZE(module_path));
+    if (length == 0 || length >= ARRAYSIZE(module_path)) return false;
+    for (DWORD i = 0; i < length; ++i) {
+        if (module_path[i] >= L'A' && module_path[i] <= L'Z') {
+            module_path[i] = static_cast<wchar_t>(module_path[i] - L'A' + L'a');
+        }
+    }
+    return std::wcsstr(module_path, L"nvngx_dlssg") != nullptr ||
+           std::wcsstr(module_path, L"\\models\\dlssg\\") != nullptr ||
+           std::wcsstr(module_path, L"/models/dlssg/") != nullptr;
+}
+
+bool Manager::IsDlssgProvider(HMODULE mod) {
+    if (!mod) return false;
+    if (HasKnownDlssgPath(mod)) return true;
+
+    const bool has_d3d12_entry =
+        GetProcAddress(mod, "NVSDK_NGX_D3D12_PopulateDeviceParameters_Impl") != nullptr;
+    const bool has_vulkan_entry =
+        GetProcAddress(mod, "NVSDK_NGX_VULKAN_PopulateDeviceParameters_Impl") != nullptr;
+
+    if (!has_d3d12_entry && !has_vulkan_entry) return false;
+    constexpr char kDlssgMarker[] = "dlfg_kernel";
+    return ModuleContains(mod, kDlssgMarker, sizeof(kDlssgMarker) - 1);
+}
+
 bool Manager::PatchArchGatesInModule(HMODULE mod) {
     if (!mod || s_archPatched.load()) return false;
 
@@ -567,18 +626,20 @@ bool Manager::PatchFrameCountCeiling(HMODULE mod) {
     s_ceilingSite = found;
     s_ceilingOriginal = found[1];
     s_ceilingCmovOriginal = found[9];
+    s_ceilingCompiled = found[1];
+    s_ceilingEffective = s_ceilingCompiled;
 
-    constexpr uint8_t kCeilingTarget = 5; // 5 generated frames = 6X
-    if (found[1] < kCeilingTarget) {
-        found[1] = kCeilingTarget;
-    }
-    found[9] = 0xD2; // cmovb edx, ecx -> cmovb edx, edx
+    // cmovb edx, ecx -> cmovb edx, edx (0x0F 0x42 0xD2)
+    // Preserves the plugin's own compiled ceiling (3 for older plugins, 5 for newer)
+    // and prevents lowering it to ecx (1 on Ada/non-Blackwell)
+    found[9] = 0xD2;
 
     DWORD ignored = 0;
     VirtualProtect(found, 10, old_protect, &ignored);
     FlushInstructionCache(GetCurrentProcess(), found, 10);
     s_ceilingPatched.store(true);
-    LOG_INFO("AdaMFGUnlock: Uncapped DLSS-G frame count ceiling to 5 (6X) in plugin!");
+    LOG_INFO("AdaMFGUnlock: Uncapped DLSS-G frame count ceiling (compiled={}, effective={}) via cmovb edx, edx!",
+             s_ceilingCompiled, s_ceilingEffective);
     return true;
 }
 
@@ -713,20 +774,28 @@ bool Manager::PatchDlssgPlugin(HMODULE pluginModule) {
 void Manager::OnModuleLoaded(HMODULE mod, const wchar_t* path) {
     if (!mod || !s_enabled.load()) return;
 
-    wchar_t modPath[MAX_PATH] = {};
-    if (path != nullptr) {
-        wcsncpy_s(modPath, path, MAX_PATH);
-    } else {
-        GetModuleFileNameW(mod, modPath, MAX_PATH);
-    }
-
-    std::wstring lower(modPath);
-    for (auto& c : lower) c = towlower(c);
-
-    if (lower.find(L"nvngx_dlssg") != std::wstring::npos || lower.find(L"\\models\\dlssg\\") != std::wstring::npos) {
+    if (IsDlssgProvider(mod)) {
+        LOG_INFO("AdaMFGUnlock: OnModuleLoaded identified DLSS-G provider, patching immediately...");
         PatchNvngxDlssg(mod);
-    } else if (lower.find(L"sl.dlss_g") != std::wstring::npos || lower.find(L"sl_dlss_g_") != std::wstring::npos) {
-        PatchDlssgPlugin(mod);
+    } else {
+        wchar_t modPath[MAX_PATH] = {};
+        if (path != nullptr) {
+            wcsncpy_s(modPath, path, MAX_PATH);
+        } else {
+            GetModuleFileNameW(mod, modPath, MAX_PATH);
+        }
+
+        std::wstring lower(modPath);
+        for (auto& c : lower) c = towlower(c);
+
+        if (lower.find(L"nvngx_dlssg") != std::wstring::npos ||
+            lower.find(L"\\models\\dlssg\\") != std::wstring::npos ||
+            lower.find(L"/models/dlssg/") != std::wstring::npos) {
+            PatchNvngxDlssg(mod);
+        } else if (lower.find(L"sl.dlss_g") != std::wstring::npos ||
+                   lower.find(L"sl_dlss_g") != std::wstring::npos) {
+            PatchDlssgPlugin(mod);
+        }
     }
 }
 
@@ -753,16 +822,22 @@ void Manager::CheckAndPatchAll() {
             me.dwSize = sizeof(me);
             if (Module32FirstW(snap, &me)) {
                 do {
-                    std::wstring name(me.szModule);
-                    for (auto& c : name) c = towlower(c);
+                    if (me.hModule == dllModule) continue;
 
-                    if (!s_flipMeteringPatched.load() &&
-                        (name.find(L"sl.dlss_g") != std::wstring::npos || name.find(L"dlss_g") != std::wstring::npos)) {
-                        PatchDlssgPlugin(me.hModule);
-                    }
-                    if ((!s_archPatched.load() || !s_midpointPatched.load()) &&
-                        (name.find(L"nvngx_dlssg") != std::wstring::npos || name.find(L"dlssg") != std::wstring::npos)) {
+                    if ((!s_archPatched.load() || !s_midpointPatched.load()) && IsDlssgProvider(me.hModule)) {
                         PatchNvngxDlssg(me.hModule);
+                    }
+
+                    if (!s_flipMeteringPatched.load()) {
+                        wchar_t fullPath[MAX_PATH] = {};
+                        GetModuleFileNameW(me.hModule, fullPath, MAX_PATH);
+                        std::wstring pathLower(fullPath);
+                        for (auto& c : pathLower) c = towlower(c);
+
+                        if (pathLower.find(L"sl.dlss_g") != std::wstring::npos ||
+                            pathLower.find(L"sl_dlss_g") != std::wstring::npos) {
+                            PatchDlssgPlugin(me.hModule);
+                        }
                     }
                 } while (Module32NextW(snap, &me));
             }

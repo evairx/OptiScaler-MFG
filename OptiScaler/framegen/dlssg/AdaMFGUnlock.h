@@ -41,6 +41,12 @@ private:
     static inline uint8_t* s_ceilingSite = nullptr;
     static inline uint8_t s_ceilingOriginal = 0;
     static inline uint8_t s_ceilingCmovOriginal = 0;
+    static inline uint32_t s_ceilingCompiled = 0;
+    static inline uint32_t s_ceilingEffective = 0;
+
+    static bool ModuleContains(HMODULE mod, const char* needle, size_t needle_len);
+    static bool HasKnownDlssgPath(HMODULE mod);
+    static bool IsDlssgProvider(HMODULE mod);
 
     static bool WriteFlipSite(uint8_t* at, const uint8_t* bytes, size_t length);
     static bool PatchArchGatesInModule(HMODULE mod);
@@ -56,6 +62,8 @@ public:
     static bool IsMidpointPatched();
     static bool IsFlipMeteringPatched();
     static bool IsCeilingPatched();
+    static bool IsPacingReady();
+    static uint32_t GetCeilingEffective();
 
     // Triggered when a module is loaded or during bootstrap
     static void OnModuleLoaded(HMODULE mod, const wchar_t* path = nullptr);
