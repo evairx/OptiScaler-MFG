@@ -169,7 +169,7 @@ inline bool BuildTemporalFatbin(const uint8_t* fat, size_t fat_size,
             std::string replacement = ".target " + targetPtx;
             std::memcpy(ptx.data() + target_pos, replacement.data(), replacement.size());
             LOG_INFO("AdaMFGUnlock: Rewrote PTX target sm_89 -> {} for GPU arch 0x{:X}",
-                     targetPtx, primaryGpu.nvidiaArchInfo.architecture_id);
+                     targetPtx, static_cast<uint32_t>(primaryGpu.nvidiaArchInfo.architecture_id));
         }
     }
 
