@@ -3130,18 +3130,24 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
     outputOptions = {
         { FGOutput::NoFG, "None" },
         { FGOutput::FSRFG, "AMD FSR FG", "FSR3/4-FG, RDNA4 autoupgrades to FSR4-FG\n\nFSR4-FG sometimes better/worse than XeFG" },
-        { FGOutput::DLSSG, "NVIDIA DLSS MFG", "Real NVIDIA DLSS Multi-Frame Generation for RTX 40. MFG unlock is opt-in and never falls back to FSR." },
+        { FGOutput::DLSSG, "NVIDIA DLSS MFG", "Real NVIDIA DLSS Multi-Frame Generation for RTX 20/30/40. MFG unlock is opt-in and never falls back to FSR." },
         { FGOutput::XeFG, "Intel XeFG", "XeFG - heaviest, but best universal FG\n\nXeFG 3 overall deals best with HUD\n\nEnable UI Composition if HUD ghosting" },
     };
 
     // clang-format on
 
+    const auto& primaryGpu = IdentifyGpu::getPrimaryGpu();
+    const uint32_t archId = static_cast<uint32_t>(primaryGpu.nvidiaArchInfo.architecture_id);
+    const bool isAda = (archId >= 0x00000190) || (primaryGpu.name.find("RTX 40") != std::string::npos);
+    const bool isAmpere = AmpereMfgLoader::IsAmpereArch(archId) || (primaryGpu.name.find("RTX 30") != std::string::npos);
+    const bool isTuring = AmpereMfgLoader::IsTuringArch(archId) || (primaryGpu.name.find("RTX 20") != std::string::npos || primaryGpu.name.find("GTX 16") != std::string::npos);
+    const bool supportsDlssg = (primaryGpu.vendorId == VendorId::Nvidia) && (isAda || isAmpere || isTuring);
+
     // DLSSG output requirements
     auto constexpr dlssgOutputIndex = (uint32_t) FGOutput::DLSSG;
-    const bool supportsDlssg = MfgUnlock::IsSupportedGpu();
 
     outputOptions[dlssgOutputIndex].set_disabled(state.swapchainApi == API::Vulkan, "Unsupported API");
-    outputOptions[dlssgOutputIndex].set_disabled(!supportsDlssg, "Real MFG output requires NVIDIA RTX 40 (Ada)");
+    outputOptions[dlssgOutputIndex].set_disabled(!supportsDlssg, "Real MFG output requires an NVIDIA RTX GPU (20, 30, or 40 series)");
 
     // FSR FG output requirements
     auto constexpr fsrfgOutputIndex = (uint32_t) FGOutput::FSRFG;
@@ -3226,11 +3232,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             ImGui::EndTable();
         }
 
-        const auto& primaryGpu = IdentifyGpu::getPrimaryGpu();
-        const uint32_t archId = static_cast<uint32_t>(primaryGpu.nvidiaArchInfo.architecture_id);
-        const bool isAda = (archId >= 0x00000190) || (primaryGpu.name.find("RTX 40") != std::string::npos);
-        const bool isAmpere = AmpereMfgLoader::IsAmpereArch(archId) || (primaryGpu.name.find("RTX 30") != std::string::npos);
-        const bool isTuring = AmpereMfgLoader::IsTuringArch(archId) || (primaryGpu.name.find("RTX 20") != std::string::npos || primaryGpu.name.find("GTX 16") != std::string::npos);
+
 
         const bool mfgAdaVal = config->FGDLSSGAdaMfgUnlock.value_or(config->FGDLSSGUnlockAdaMFG.value_or_default());
         const bool mfgAmpereVal = config->FGDLSSGAmpereMfgUnlock.value_or_default();

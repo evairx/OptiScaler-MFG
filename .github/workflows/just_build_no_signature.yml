@@ -126,7 +126,7 @@ jobs:
         tag_name: ${{ steps.get_version.outputs.version }}
         name: OptiScaler-MFG ${{ steps.get_version.outputs.version }}
         body_path: RELEASE_NOTES.md
-        draft: true
+        draft: false
         prerelease: false
         files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
       env:
