@@ -1827,7 +1827,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
         PrepareLogger();
 
-        spdlog::warn("{0} loaded", VER_PRODUCT_NAME);
+        spdlog::warn("evairx/optiscaler-mfg v{0} loaded", VER_PRODUCT_VERSION_STR);
         spdlog::warn("---------------------------------");
         spdlog::warn("OptiScaler is freely downloadable from");
         spdlog::warn("GitHub : https://github.com/optiscaler/OptiScaler/releases");
@@ -1877,7 +1877,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
         // Initialize Ada/Turing MFG unlock from config
         State::Instance().activeUnlockAdaMFG = Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default();
-        AdaMFGUnlock::Manager::SetEnabled(State::Instance().activeUnlockAdaMFG);
 
         // Init Kernel proxies
         NtdllProxy::Init();

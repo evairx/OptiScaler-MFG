@@ -3442,36 +3442,13 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.8f, 0.2f, 1.f)), "Mode: OptiScaler DLSS-G (OptiFG)");
             }
 
-            // In native DLSS-G mode, do not allow pressing Unlock MFG if Frame Generation is not active in game settings
-            const bool disableUnlockMfg = isNativeDlssgMode && !isNativeDlssgActive;
-
-            if (disableUnlockMfg)
-                ImGui::BeginDisabled(true);
-
             bool unlockAda = config->FGDLSSGUnlockAdaMFG.value_or_default();
             if (ImGui::Checkbox("Unlock MFG", &unlockAda))
             {
                 config->FGDLSSGUnlockAdaMFG = unlockAda;
-                AdaMFGUnlock::Manager::SetEnabled(unlockAda);
                 state.fgSettingsChanged = true;
             }
-
-            if (disableUnlockMfg)
-            {
-                ImGui::EndDisabled();
-                ImGui::SameLine();
-                ImGui::TextDisabled("(!)");
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Enable Frame Generation in the game settings first to use Unlock MFG.");
-                }
-                ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.6f, 0.2f, 1.0f)),
-                                   "Enable Frame Generation in the game settings first.");
-            }
-            else
-            {
-                ShowHelpMarker("Unlocks NVIDIA DLSS Frame Generation on RTX 20, RTX 30 and RTX 40 series using Tensor Cores");
-            }
+            ShowHelpMarker("Unlocks NVIDIA DLSS Frame Generation on RTX 20, RTX 30 and RTX 40 series using Tensor Cores");
 
             // Status / Restart message
             if (state.activeUnlockAdaMFG != unlockAda)
@@ -3570,7 +3547,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                     ImGui::EndDisabled();
                 }
             }
-            else if (!disableUnlockMfg)
+            else
             {
                 ImGui::Spacing();
                 ImGui::TextDisabled("(! ) Enable Unlock MFG, save settings and restart the game.");
@@ -7736,7 +7713,7 @@ void MenuCommon::RenderMainMenuWindow(RenderMenuContext& ctx)
     // Main menu window
     if (windowTitle.empty())
     {
-        windowTitle = StrFmt("%s - %s %s %s %s", VER_PRODUCT_NAME, state.gameExe.c_str(),
+        windowTitle = StrFmt("evairx/optiscaler-mfg v%s - %s %s %s %s", OPTI_VERSION, state.gameExe.c_str(),
                              state.gameName.empty() ? "" : StrFmt("- %s", state.gameName.c_str()).c_str(),
                              (state.detectedQuirks.size() > 0) ? "(Q)" : "", state.isOptiPatcherSucceed ? "(OP)" : "");
     }

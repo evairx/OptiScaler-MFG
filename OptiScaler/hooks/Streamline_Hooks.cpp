@@ -1217,7 +1217,11 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
 
         if (originalStructVersion >= 2)
         {
-            state.numFramesToGenerateMax = newState.numFramesToGenerateMax;
+            if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+                state.numFramesToGenerateMax = 5;
+            else
+                state.numFramesToGenerateMax = newState.numFramesToGenerateMax;
+
             state.bReserved4 = newState.bReserved4;
             state.bIsVsyncSupportAvailable = newState.bIsVsyncSupportAvailable;
         }
@@ -1235,6 +1239,9 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
     {
         result = o_slDLSSGGetState(viewport, state, options);
         State::Instance().dlssgGameDMFGSupported = state.bIsDynamicMFGSupported == sl::eTrue;
+
+        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+            state.numFramesToGenerateMax = 5;
     }
 
     if (!State::Instance().dlssgGameDMFGSupported)
@@ -1247,10 +1254,11 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
     if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
     {
         AdaMFGUnlock::Manager::CheckAndPatchAll();
-        state.numFramesToGenerateMax = 5;
+        optiState.dlssgMfgMax = 5;
     }
 
-    if (optiState.streamlineVersion >= feature_version { 2, 7, 1 })
+    if (optiState.streamlineVersion >= feature_version { 2, 7, 1 } ||
+        Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
     {
         if (!optiState.dlssgMfgMax.has_value())
         {
@@ -1294,7 +1302,8 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
             state.numFramesActuallyPresented = 1;
         }
 
-        state.numFramesToGenerateMax = 1;
+        if (state.structVersion >= 2)
+            state.numFramesToGenerateMax = 1;
 
         LOG_DEBUG("Status: {}, numFramesActuallyPresented: {}", magic_enum::enum_name(state.status),
                   state.numFramesActuallyPresented);
