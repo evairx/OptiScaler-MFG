@@ -73,7 +73,7 @@ std::optional<LatestReleaseInfo> FetchLatestRelease()
         return std::nullopt;
     }
 
-    request = WinHttpOpenRequest(connection, L"GET", L"/repos/optiscaler/optiscaler/releases/latest", nullptr,
+    request = WinHttpOpenRequest(connection, L"GET", L"/repos/evairx/OptiScaler-MFG/releases/latest", nullptr,
                                  WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
     if (request == nullptr)
     {

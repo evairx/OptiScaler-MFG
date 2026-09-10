@@ -1247,13 +1247,9 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
     if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
     {
         AdaMFGUnlock::Manager::CheckAndPatchAll();
-        state.numFramesToGenerateMax = 5;
-        state.bIsDynamicMFGSupported = sl::eTrue;
-        optiState.dlssgGameDMFGSupported = true;
     }
 
-    if (optiState.streamlineVersion >= feature_version { 2, 7, 1 } ||
-        Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    if (optiState.streamlineVersion >= feature_version { 2, 7, 1 })
     {
         if (!optiState.dlssgMfgMax.has_value())
         {

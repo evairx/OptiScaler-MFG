@@ -3398,8 +3398,11 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
 
         const bool nvngxFgChanged = (replaceFgOutputWithNvngx || showNvngxFgDowndown) &&
                                     state.activeFgNvngx != config->FGNvngxReplacement.value_or_default();
+        const bool mfgUnlockChanged = config->FGDLSSGUnlockAdaMFG.has_value() &&
+                                      state.activeUnlockAdaMFG != config->FGDLSSGUnlockAdaMFG.value_or_default();
         state.fgSettingsChanged = state.activeFgOutput != config->FGOutput.value_or_default() ||
-                                  state.activeFgInput != config->FGInput.value_or_default() || nvngxFgChanged;
+                                  state.activeFgInput != config->FGInput.value_or_default() ||
+                                  nvngxFgChanged || mfgUnlockChanged;
 
         if (state.fgSettingsChanged)
         {
@@ -3423,11 +3426,14 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             ImGui::Spacing();
             ImGui::SeparatorText("MFG RTX 20/30/40");
 
-            if (StreamlineHooks::isNativeDlssgActive())
+            const bool isNativeDlssgMode = isNativeDlssgPresent && (config->FGOutput != FGOutput::DLSSG);
+            const bool isNativeDlssgActive = StreamlineHooks::isNativeDlssgActive();
+
+            if (isNativeDlssgActive)
             {
                 ImGui::TextColored(toneMapColor(ImVec4(0.f, 1.f, 0.25f, 1.f)), "Mode: Native Game DLSS-G (Active)");
             }
-            else if (isNativeDlssgPresent && config->FGOutput != FGOutput::DLSSG)
+            else if (isNativeDlssgMode)
             {
                 ImGui::TextColored(toneMapColor(ImVec4(0.4f, 0.8f, 1.0f, 1.f)), "Mode: Native Game DLSS-G (Standby - Toggle in Game Settings)");
             }
@@ -3436,115 +3442,57 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.8f, 0.2f, 1.f)), "Mode: OptiScaler DLSS-G (OptiFG)");
             }
 
-            // 1. Top: Unlock MFG Checkbox
+            // In native DLSS-G mode, do not allow pressing Unlock MFG if Frame Generation is not active in game settings
+            const bool disableUnlockMfg = isNativeDlssgMode && !isNativeDlssgActive;
+
+            if (disableUnlockMfg)
+                ImGui::BeginDisabled(true);
+
             bool unlockAda = config->FGDLSSGUnlockAdaMFG.value_or_default();
             if (ImGui::Checkbox("Unlock MFG", &unlockAda))
             {
                 config->FGDLSSGUnlockAdaMFG = unlockAda;
                 AdaMFGUnlock::Manager::SetEnabled(unlockAda);
-                if (unlockAda)
-                {
-                    AdaMFGUnlock::Manager::CheckAndPatchAll();
-                    StreamlineHooks::updateDlssgOptions();
-                }
-                else
-                {
-                    config->FGDLSSGOverrideInterpolationCount.reset();
-                    config->FGDLSSGInterpolationCount = 1;
-                    StreamlineHooks::updateDlssgOptions();
-                }
-            }
-            ShowHelpMarker("Unlocks NVIDIA DLSS Multi-Frame Generation (2X, 3X, 4X, 6X) on RTX 20, RTX 30 and RTX 40 series using Tensor Cores without ReShade");
-
-            // 2. Below: Multi-Frame Variants / Multiplier
-            ImGui::BeginDisabled(!unlockAda);
-
-            const char* ratioModes[] = {
-                "Default (Game)",
-                "2X (1 extra frame)",
-                "3X (2 extra frames)",
-                "4X (3 extra frames)",
-                "5X (4 extra frames)",
-                "6X (5 extra frames)"
-            };
-
-            int currentRatio = 0; // Default
-            if (config->FGDLSSGOverrideInterpolationCount.has_value())
-            {
-                currentRatio = config->FGDLSSGOverrideInterpolationCount.value();
-            }
-            else if (config->FGDLSSGInterpolationCount.has_value() && config->FGDLSSGInterpolationCount.value() >= 1)
-            {
-                currentRatio = config->FGDLSSGInterpolationCount.value();
+                state.fgSettingsChanged = true;
             }
 
-            if (currentRatio < 0 || currentRatio >= 6)
-                currentRatio = 0;
-
-            ImGui::PushItemWidth(175.0f * menuResScale);
-            if (ImGui::BeginCombo("Multi-Frame Ratio", ratioModes[currentRatio]))
+            if (disableUnlockMfg)
             {
-                for (int i = 0; i < 6; i++)
-                {
-                    if (ImGui::Selectable(ratioModes[i], currentRatio == i))
-                    {
-                        if (i == 0)
-                        {
-                            config->FGDLSSGOverrideInterpolationCount.reset();
-                            config->FGDLSSGInterpolationCount = 1;
-                        }
-                        else
-                        {
-                            int extraFrames = i; // 1 -> 2X, 2 -> 3X, 3 -> 4X, 4 -> 5X, 5 -> 6X
-                            config->FGDLSSGOverrideInterpolationCount = extraFrames;
-                            config->FGDLSSGInterpolationCount = extraFrames;
-                            LOG_DEBUG("DLSSG Interpolation Count set to: {}", extraFrames);
-                        }
-                        StreamlineHooks::updateDlssgOptions();
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            ImGui::PopItemWidth();
-            ShowHelpMarker("Select multi-frame generation multiplier (2X, 3X, 4X, 6X) running natively on Tensor Cores");
-
-            ImGui::EndDisabled();
-
-            if (!unlockAda)
-            {
-                ImGui::TextDisabled("(! ) Unlock MFG must be enabled to use multi-frame variants (3X, 4X, 6X)");
-            }
-
-            if (state.dlssgGameDMFGSupported && config->FGOutput != FGOutput::DLSSG)
-            {
-                if (bool dynamicMFG = config->FGDLSSGOverrideForceDMFG.value_or_default();
-                    ImGui::Checkbox("Force Dynamic MFG", &dynamicMFG))
-                {
-                    config->FGDLSSGOverrideForceDMFG = dynamicMFG;
-                    StreamlineHooks::updateDlssgOptions();
-                }
-
-                ImGui::BeginDisabled(state.dlssgLastSetMode != sl::DLSSGMode::eDynamic);
-                static float fpsTarget = config->FGDLSSGFramerateTargetDMFG.value_or_default();
-                ImGui::SliderFloat("DMFG FPS Target", &fpsTarget, 0, 200, "%.0f");
-
-                ShowHelpMarker("An active limit of 0 means auto-detect the display refresh rate");
-
-                if (ImGui::Button("Apply Target"))
-                {
-                    config->FGDLSSGFramerateTargetDMFG = fpsTarget;
-                    StreamlineHooks::updateDlssgOptions();
-                }
-
-                ImGui::SameLine(0.0f, 16.0f);
-
-                if (ImGui::Button("Reset Target"))
-                {
-                    fpsTarget = 0.0f;
-                    config->FGDLSSGFramerateTargetDMFG.reset();
-                }
-
                 ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::TextDisabled("(!)");
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Enable Frame Generation in the game settings first to use Unlock MFG.");
+                }
+                ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.6f, 0.2f, 1.0f)),
+                                   "Enable Frame Generation in the game settings first.");
+            }
+            else
+            {
+                ShowHelpMarker("Unlocks NVIDIA DLSS Frame Generation on RTX 20, RTX 30 and RTX 40 series using Tensor Cores");
+            }
+
+            // Status / Restart message
+            if (state.activeUnlockAdaMFG != unlockAda)
+            {
+                ImGui::Spacing();
+                ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.2f, 0.2f, 1.0f)),
+                                   "Save Settings and restart the game for MFG to take effect.");
+                ImGui::Spacing();
+            }
+            else if (unlockAda)
+            {
+                ImGui::Spacing();
+                ImGui::TextColored(toneMapColor(ImVec4(0.0f, 1.0f, 0.25f, 1.0f)),
+                                   "MFG is active and running on Tensor Cores.");
+                ImGui::Spacing();
+            }
+            else if (!disableUnlockMfg)
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled("(! ) Enable Unlock MFG, save settings and restart the game.");
+                ImGui::Spacing();
             }
         }
 
