@@ -38,7 +38,7 @@
 #include <hooks/Crypt32_Hooks.h>
 #include <hooks/Advapi32_Hooks.h>
 #include <hooks/Streamline_Hooks.h>
-#include <framegen/dlssg/AdaMFGUnlock.h>
+#include <framegen/dlssg/MfgUnlock.h>
 
 #include <nvapi/NvApiHooks.h>
 
@@ -1862,8 +1862,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         if (State::Instance().activeFgInput == FGInput::NoFG)
             State::Instance().activeFgOutput = FGOutput::NoFG;
 
-        // Initialize Ada/Turing MFG unlock from config
-        State::Instance().activeUnlockAdaMFG = Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default();
+        // Initialize Ada MFG unlock from config
+        State::Instance().activeUnlockAdaMFG = Config::Instance()->FGDLSSGAdaMfgUnlock.value_or(
+            Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default());
 
         // Init Kernel proxies
         NtdllProxy::Init();

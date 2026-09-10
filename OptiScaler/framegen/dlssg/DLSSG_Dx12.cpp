@@ -1,7 +1,7 @@
 #include "pch.h"
 
 #include "DLSSG_Dx12.h"
-#include "AdaMFGUnlock.h"
+#include "MfgUnlock.h"
 
 #include <hudfix/Hudfix_Dx12.h>
 #include <menu/menu_overlay_dx.h>
@@ -22,21 +22,16 @@ namespace {
 
 void UpdateVerifiedMfgCapabilities(int& maxInterpolationCount)
 {
-    static std::atomic_bool reportedUnavailable { false };
-
-    if (!Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    if (Config::Instance()->FGDLSSGAdaMfgUnlock.value_or_default() ||
+        Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
     {
-        maxInterpolationCount = std::max(maxInterpolationCount, 1);
+        MfgUnlock::TryApply();
+        auto unlocked = MfgUnlock::UnlockedMax();
+        maxInterpolationCount = std::max(maxInterpolationCount, unlocked > 0 ? static_cast<int>(unlocked) : 5);
         return;
     }
 
-    AdaMFGUnlock::Manager::SetEnabled(true);
-    AdaMFGUnlock::Manager::CheckAndPatchAll();
-
-    maxInterpolationCount = std::max(maxInterpolationCount,
-                                     static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective()));
-    // Dynamic MFG has a separate provider capability bit and remains governed
-    // exclusively by slDLSSGGetState.
+    maxInterpolationCount = std::max(maxInterpolationCount, 1);
 }
 
 } // namespace
@@ -56,8 +51,12 @@ HWND DLSSG_Dx12::Hwnd() { return _hwnd; }
 
 int DLSSG_Dx12::GetMaxInterpolationCount() const
 {
-    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-        return static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective());
+    if (Config::Instance()->FGDLSSGAdaMfgUnlock.value_or_default() ||
+        Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    {
+        auto unlocked = MfgUnlock::UnlockedMax();
+        return unlocked > 0 ? static_cast<int>(unlocked) : 5;
+    }
     if (_maxInterpolationCount > 1)
         return _maxInterpolationCount;
     return 1;

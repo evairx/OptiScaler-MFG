@@ -11,7 +11,7 @@
 #include <menu/menu_overlay_base.h>
 #include <proxies/KernelBase_Proxy.h>
 #include <imgui/ImGuiNotify.hpp>
-#include <framegen/dlssg/AdaMFGUnlock.h>
+#include <framegen/dlssg/MfgUnlock.h>
 
 #include <json.hpp>
 #include <sl1_reflex.h>
@@ -1017,77 +1017,50 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 
     LOG_TRACE("DLSSG Modified Mode: {}", magic_enum::enum_name(newOptions.mode));
 
-    const bool mfgUnlockEnabled = Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default();
-    if (mfgUnlockEnabled)
-    {
-        AdaMFGUnlock::Manager::SetEnabled(true);
-        AdaMFGUnlock::Manager::CheckAndPatchAll();
-        state.dlssgMfgMax = static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective());
-    }
-
     if (dlssgPotentiallyActive)
     {
-        if (!mfgUnlockEnabled)
+        MfgUnlock::TryApply();
+
+        const bool unlockPending = MfgUnlock::Pending();
+
+        // Populate dlssgMfgMax once
+        if (!state.dlssgMfgMax.has_value() && !unlockPending)
         {
-            // Populate dlssgMfgMax once for native SL 2.7.1+
-            if (!state.dlssgMfgMax.has_value())
+            sl::DLSSGState localState {};
+            sl::DLSSGOptions localOptions {};
+            if (o_slDLSSGGetState(viewport, localState, &localOptions) == sl::Result::eOk)
             {
-                sl::DLSSGState localState {};
-                sl::DLSSGOptions localOptions {};
-                if (o_slDLSSGGetState(viewport, localState, &localOptions) == sl::Result::eOk &&
-                    localState.numFramesToGenerateMax > 0 && localState.numFramesToGenerateMax < 6)
+                if (auto unlockedMax = MfgUnlock::UnlockedMax(); unlockedMax > localState.numFramesToGenerateMax)
+                    localState.numFramesToGenerateMax = unlockedMax;
+
+                if (localState.numFramesToGenerateMax > 0 && localState.numFramesToGenerateMax < 6)
                 {
                     state.dlssgMfgMax = localState.numFramesToGenerateMax;
                     LOG_TRACE("Saving original numFramesToGenerateMax: {}", state.dlssgMfgMax.value());
+
+                    if (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value() &&
+                        Config::Instance()->FGDLSSGOverrideInterpolationCount.value() > state.dlssgMfgMax.value())
+                    {
+                        Config::Instance()->FGDLSSGOverrideInterpolationCount.set_volatile_value(
+                            state.dlssgMfgMax.value());
+                    }
                 }
             }
         }
-
-        const int maxGeneratedFrames = mfgUnlockEnabled ? 5 : state.dlssgMfgMax.value_or(1);
 
         if (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value())
         {
             auto overrideCount = Config::Instance()->FGDLSSGOverrideInterpolationCount.value();
-            if (overrideCount > 0 && overrideCount <= maxGeneratedFrames)
+            if (overrideCount != 0)
                 newOptions.numFramesToGenerate = overrideCount;
             else if (!enableDynamicMode)
-            {
-                if (overrideCount > maxGeneratedFrames)
-                {
-                    LOG_WARN("StreamlineHooks: refusing requested {}x MFG; the active provider has only verified up to {}x.",
-                             overrideCount + 1, maxGeneratedFrames + 1);
-                }
-                else
-                {
-                    newOptions.mode = sl::DLSSGMode::eOff;
-                }
-            }
+                newOptions.mode = sl::DLSSGMode::eOff;
         }
-    }
-
-    // Ensure flip metering software pacing and frame ceiling are patched for multi-frame
-    if (newOptions.numFramesToGenerate > 1)
-    {
-        AdaMFGUnlock::Manager::CheckAndPatchAll();
     }
 
     state.dlssgLastSetMode = newOptions.mode;
 
     sl::Result result = o_slDLSSGSetOptions(viewport, newOptions);
-
-    if (result != sl::Result::eOk && newOptions.numFramesToGenerate > options.numFramesToGenerate)
-    {
-        // DLSS-G can return eErrorFeatureManagerInvalidState on the first attempt when activating.
-        // Retry once before falling back.
-        result = o_slDLSSGSetOptions(viewport, newOptions);
-        if (result != sl::Result::eOk)
-        {
-            LOG_WARN("StreamlineHooks: slDLSSGSetOptions refused {}x MFG twice; restoring the game's request of {}x.",
-                     newOptions.numFramesToGenerate + 1, options.numFramesToGenerate + 1);
-            newOptions.numFramesToGenerate = options.numFramesToGenerate;
-            result = o_slDLSSGSetOptions(viewport, newOptions);
-        }
-    }
 
     if (result == sl::Result::eOk && dlssgPotentiallyActive)
     {
@@ -1100,6 +1073,8 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport, sl::DLSSGState& state,
                                               const sl::DLSSGOptions* options)
 {
+    MfgUnlock::TryApply();
+
     sl::Result result {};
 
     const auto originalStructVersion = state.structVersion;
@@ -1109,6 +1084,8 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
 
         // We might be feeding a newer struct to an older SL but that seems to work just fine for this Get function
         result = o_slDLSSGGetState(viewport, dynamic_cast<sl::DLSSGState&>(newState), options);
+        if (result != sl::Result::eOk)
+            return result;
 
         // Copy back data to game's struct
         memcpy(&state, &newState, 56); // struct ver 1 size
@@ -1117,9 +1094,11 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
         if (originalStructVersion >= 2)
         {
             state.numFramesToGenerateMax = newState.numFramesToGenerateMax;
-
             state.bReserved4 = newState.bReserved4;
             state.bIsVsyncSupportAvailable = newState.bIsVsyncSupportAvailable;
+
+            if (auto unlockedMax = MfgUnlock::UnlockedMax(); unlockedMax > state.numFramesToGenerateMax)
+                state.numFramesToGenerateMax = unlockedMax;
         }
 
         if (originalStructVersion >= 3)
@@ -1134,8 +1113,12 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
     else
     {
         result = o_slDLSSGGetState(viewport, state, options);
+        if (result != sl::Result::eOk)
+            return result;
         State::Instance().dlssgGameDMFGSupported = state.bIsDynamicMFGSupported == sl::eTrue;
 
+        if (auto unlockedMax = MfgUnlock::UnlockedMax(); unlockedMax > state.numFramesToGenerateMax)
+            state.numFramesToGenerateMax = unlockedMax;
     }
 
     if (!State::Instance().dlssgGameDMFGSupported)
@@ -1145,25 +1128,17 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
 
     auto& optiState = State::Instance();
 
-    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    const bool unlockPending = MfgUnlock::Pending();
+    if (!optiState.dlssgMfgMax.has_value() && !unlockPending)
     {
-        AdaMFGUnlock::Manager::SetEnabled(true);
-        AdaMFGUnlock::Manager::CheckAndPatchAll();
-        const auto maxGenerated = AdaMFGUnlock::Manager::GetCeilingEffective();
-        optiState.dlssgMfgMax = static_cast<int>(maxGenerated);
-        if (state.structVersion >= 2)
-            state.numFramesToGenerateMax = maxGenerated;
-    }
-
-    if (!Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default() &&
-        optiState.streamlineVersion >= feature_version { 2, 7, 1 })
-    {
-        if (!optiState.dlssgMfgMax.has_value())
+        sl::DLSSGState localState {};
+        sl::DLSSGOptions localOptions {};
+        if (o_slDLSSGGetState(viewport, localState, &localOptions) == sl::Result::eOk)
         {
-            sl::DLSSGState localState {};
-            sl::DLSSGOptions localOptions {};
-            if (o_slDLSSGGetState(viewport, localState, &localOptions) == sl::Result::eOk &&
-                localState.numFramesToGenerateMax > 0 && localState.numFramesToGenerateMax < 6)
+            if (auto unlockedMax = MfgUnlock::UnlockedMax(); unlockedMax > localState.numFramesToGenerateMax)
+                localState.numFramesToGenerateMax = unlockedMax;
+
+            if (localState.numFramesToGenerateMax > 0 && localState.numFramesToGenerateMax < 6)
             {
                 optiState.dlssgMfgMax = localState.numFramesToGenerateMax;
                 LOG_TRACE("Saving original numFramesToGenerateMax: {}", optiState.dlssgMfgMax.value());
@@ -1171,7 +1146,8 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
                 if (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value() &&
                     Config::Instance()->FGDLSSGOverrideInterpolationCount.value() > optiState.dlssgMfgMax.value())
                 {
-                    Config::Instance()->FGDLSSGOverrideInterpolationCount = optiState.dlssgMfgMax.value();
+                    Config::Instance()->FGDLSSGOverrideInterpolationCount.set_volatile_value(
+                        optiState.dlssgMfgMax.value());
                 }
             }
         }

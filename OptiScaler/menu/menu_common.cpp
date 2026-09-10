@@ -10,7 +10,7 @@
 #include <proxies/FfxApi_Proxy.h>
 #include <proxies/Streamline_Proxy.h>
 
-#include <framegen/dlssg/AdaMFGUnlock.h>
+#include <framegen/dlssg/MfgUnlock.h>
 
 #include <nvapi/fakenvapi.h>
 #include <hooks/Reflex_Hooks.h>
@@ -3133,7 +3133,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
 
     // DLSSG output requirements
     auto constexpr dlssgOutputIndex = (uint32_t) FGOutput::DLSSG;
-    const bool supportsDlssg = AdaMFGUnlock::Manager::IsSupportedGpu();
+    const bool supportsDlssg = MfgUnlock::IsSupportedGpu();
 
     outputOptions[dlssgOutputIndex].set_disabled(state.swapchainApi == API::Vulkan, "Unsupported API");
     outputOptions[dlssgOutputIndex].set_disabled(!supportsDlssg, "Real MFG output requires NVIDIA RTX 40 (Ada)");
@@ -3221,8 +3221,9 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             ImGui::EndTable();
         }
 
-        const bool mfgUnlockChanged = config->FGDLSSGUnlockAdaMFG.has_value() &&
-                                      state.activeUnlockAdaMFG != config->FGDLSSGUnlockAdaMFG.value_or_default();
+        const bool mfgUnlockVal = config->FGDLSSGAdaMfgUnlock.value_or(config->FGDLSSGUnlockAdaMFG.value_or_default());
+        const bool mfgUnlockChanged = (config->FGDLSSGAdaMfgUnlock.has_value() || config->FGDLSSGUnlockAdaMFG.has_value()) &&
+                                      state.activeUnlockAdaMFG != mfgUnlockVal;
         state.fgSettingsChanged = state.activeFgOutput != config->FGOutput.value_or_default() ||
                                   state.activeFgInput != config->FGInput.value_or_default() ||
                                   mfgUnlockChanged;
@@ -3263,13 +3264,14 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.8f, 0.2f, 1.f)), "Mode: OptiScaler DLSS-G (OptiFG)");
             }
 
-            bool unlockAda = config->FGDLSSGUnlockAdaMFG.value_or_default();
+            bool unlockAda = config->FGDLSSGAdaMfgUnlock.value_or(config->FGDLSSGUnlockAdaMFG.value_or_default());
             if (ImGui::Checkbox("Unlock MFG", &unlockAda))
             {
+                config->FGDLSSGAdaMfgUnlock = unlockAda;
                 config->FGDLSSGUnlockAdaMFG = unlockAda;
                 state.fgSettingsChanged = true;
             }
-            ShowHelpMarker("Opt-in compatibility path for real NVIDIA DLSS Multi-Frame Generation on Ada / RTX 40. It never uses FSR as a fallback.");
+            ShowHelpMarker("Opt-in compatibility path for real NVIDIA DLSS Multi-Frame Generation on Ada / RTX 40. Retargets Blackwell interpolation kernels sm_120 -> sm_89 and unlocks up to 6X without FSR fallback.");
 
             // Status / Restart message
             if (state.activeUnlockAdaMFG != unlockAda)
@@ -3282,23 +3284,29 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             else if (unlockAda)
             {
                 ImGui::Spacing();
-                const bool archPatched = AdaMFGUnlock::Manager::IsArchPatched();
-                const bool ceilingPatched = AdaMFGUnlock::Manager::IsCeilingPatched();
-                const int verifiedMax = static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective());
-                if (archPatched && ceilingPatched)
+                const auto& mfgStatus = MfgUnlock::LastStatus();
+                if (mfgStatus.AdvertiseMatched && mfgStatus.ValidateMatched && mfgStatus.KernelsRewritten > 0)
                 {
+                    std::string ver = mfgStatus.SnippetVersion.empty() ? "" : (" (" + mfgStatus.SnippetVersion + ")");
                     ImGui::TextColored(toneMapColor(ImVec4(0.0f, 1.0f, 0.25f, 1.0f)),
-                                       "MFG Active: Provider validated (up to %dx).", verifiedMax + 1);
+                                       "MFG Active: nvngx_dlssg.dll%s unlocked (up to %dX, %u kernels retargeted).",
+                                       ver.c_str(),
+                                       MfgUnlock::UnlockedMax() + 1,
+                                       mfgStatus.KernelsRewritten);
                 }
-                else if (archPatched)
+                else if (mfgStatus.ModuleFound)
                 {
-                    ImGui::TextColored(toneMapColor(ImVec4(0.0f, 1.0f, 0.25f, 1.0f)),
-                                       "MFG Active: Arch gates & temporal midpoint patched.");
+                    ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.6f, 0.2f, 1.0f)),
+                                       "MFG Status: nvngx_dlssg.dll (%s) partial match (Adv:%d Val:%d Kernels:%u).",
+                                       mfgStatus.SnippetVersion.c_str(),
+                                       mfgStatus.AdvertiseMatched ? 1 : 0,
+                                       mfgStatus.ValidateMatched ? 1 : 0,
+                                       mfgStatus.KernelsRewritten);
                 }
                 else
                 {
                     ImGui::TextColored(toneMapColor(ImVec4(0.2f, 0.8f, 1.0f, 1.0f)),
-                                       "MFG Ready: Multi-frame patches apply automatically when DLSS-G runs.");
+                                       "MFG Ready: nvngx_dlssg.dll will be patched when Frame Generation initializes.");
                 }
                 ImGui::Spacing();
 

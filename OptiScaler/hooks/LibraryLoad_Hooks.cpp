@@ -32,7 +32,7 @@
 #include <fsr4/FSR4Upgrade.h>
 #include <misc/IdentifyGpu.h>
 #include <low_latency/input/input_uell.h>
-#include <framegen/dlssg/AdaMFGUnlock.h>
+#include <framegen/dlssg/MfgUnlock.h>
 
 // #define LOG_LIB_OPERATIONS
 
@@ -129,8 +129,8 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
 
             if (normalizedPath.contains(L"\\dlssg\\") || normalizedPath.contains(L"/dlssg/"))
             {
-                if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-                    AdaMFGUnlock::Manager::PatchNvngxDlssg(loadedBin);
+                if (MfgUnlock::Pending())
+                    MfgUnlock::TryApply(loadedBin);
             }
         }
         return loadedBin;
@@ -140,22 +140,11 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
     if (normalizedPath.contains(L"nvngx_dlssg"))
     {
         auto dlssgModule = NtdllProxy::LoadLibraryExW_Ldr(lpLibFullPath, NULL, 0);
-        if (dlssgModule != nullptr && Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        if (dlssgModule != nullptr && MfgUnlock::Pending())
         {
-            AdaMFGUnlock::Manager::PatchNvngxDlssg(dlssgModule);
+            MfgUnlock::TryApply(dlssgModule);
         }
         return dlssgModule;
-    }
-
-    // Direct sl.dlss_g.dll load
-    if (normalizedPath.contains(L"sl.dlss_g") || normalizedPath.contains(L"sl_dlss_g"))
-    {
-        auto pluginModule = NtdllProxy::LoadLibraryExW_Ldr(lpLibFullPath, NULL, 0);
-        if (pluginModule != nullptr && Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-        {
-            AdaMFGUnlock::Manager::PatchDlssgPlugin(pluginModule);
-        }
-        return pluginModule;
     }
 
     // NvApi64.dll
@@ -214,9 +203,6 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
 
         if (dlssgModule != nullptr)
         {
-            if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-                AdaMFGUnlock::Manager::PatchDlssgPlugin(dlssgModule);
-
             const bool localDlssg = pathInsideLocalSlPath && State::Instance().activeFgOutput == FGOutput::DLSSG;
 
             if (!localDlssg && dlssgModule != State::Instance().optiSlDLSSG)
@@ -1033,11 +1019,6 @@ void LibraryLoadHooks::CheckModulesInMemory()
             {
                 LOG_DEBUG("sl.dlss_g.dll already in memory");
                 StreamlineHooks::hookDlssg(slDlssg);
-            }
-
-            if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-            {
-                AdaMFGUnlock::Manager::PatchDlssgPlugin(slDlssg);
             }
         }
     }

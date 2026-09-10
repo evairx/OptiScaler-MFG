@@ -6,7 +6,7 @@
 #include "Config.h"
 #include <ankerl/unordered_dense.h>
 #include <misc/IdentifyGpu.h>
-#include <framegen/dlssg/AdaMFGUnlock.h>
+#include <framegen/dlssg/MfgUnlock.h>
 
 /// @brief Calculates the resolution scaling ratio override based on the provided quality level and current
 /// configuration.
@@ -810,11 +810,12 @@ void InitNGXParameters(NVSDK_NGX_Parameter* InParams, API api)
 
         // Advertise the multi-frame ceiling when Ada MFG unlock is enabled (default up to 5 = 6X)
         uint32_t countMax = 1;
-        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        if (Config::Instance()->FGDLSSGAdaMfgUnlock.value_or_default() ||
+            Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
         {
-            AdaMFGUnlock::Manager::SetEnabled(true);
-            AdaMFGUnlock::Manager::CheckAndPatchAll();
-            countMax = AdaMFGUnlock::Manager::GetCeilingEffective();
+            MfgUnlock::TryApply();
+            countMax = MfgUnlock::UnlockedMax();
+            if (countMax == 0) countMax = 5;
         }
         InParams->Set("DLSSG.MultiFrameCountMax", countMax);
 

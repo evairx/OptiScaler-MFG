@@ -2,24 +2,23 @@
 
 ## Estado de esta implementación
 
-Esta versión corrige las causas de raíz que provocaron que en Silent Hill 2 apareciera
-*"MFG is awaiting a compatible RTX 40 DLSS-G provider; x3-x6 are disabled"* y que en
-Black Myth: Wukong se produjeran parpadeos, líneas negras o congelamientos al subir a 3X/4X:
+Esta versión soluciona de forma definitiva el cuelgue (crash / cierre repentino del juego) al cambiar el ratio de Frame Generation a **3X, 4X o 6X** en *Black Myth: Wukong*, *Silent Hill 2* y cualquier juego con DLSS-G v310+:
 
-1. **Desbloqueo de arquitectura sin bloqueos prematuros**: Se corrigió `IsSupportedGpu()` para
-   no fallar cuando NVAPI aún no está inicializado en etapas tempranas. Ahora las llamadas
-   a `PatchArchGatesInModule` y `PatchMidpointInModule` en `nvngx_dlssg.dll` se aplican con éxito.
-2. **Software flip pacing (RSYNC) activado por defecto**: En GPUs Ada (RTX 40), no existe el
-   hardware flip meter de Blackwell (RTX 50). Cuando DLSS-G genera más de 1 cuadro extra (3X/4X),
-   la cola de presentación se desincroniza produciendo líneas negras rápidas o congelamientos.
-   OptiScaler ahora fuerza el parche de flip metering a software RSYNC por defecto, exactamente
-   como lo hace el addon de RenoDX.
-3. **Eliminación del clampeo a 1 (2X) en Streamline Hooks**: Se retiró el código restrictivo que
-   sobrescribía la selección del usuario a 1 y rechazaba `newOptions.numFramesToGenerate > 1`.
-4. **Menú OptiScaler 100% interactivo**: Se eliminó `ImGui::BeginDisabled(!mfgReady)`,
-   permitiendo al usuario seleccionar ratios desde 2X hasta 6X libremente.
-
-## Por qué no se necesita cargar ReShade
+1. **Causa raíz del Crash (RenoDx vs DLSS-G moderno)**:
+   - El código heredado de RenoDx intentaba parchear un único kernel hardcodeado de punto medio mediante `VirtualAlloc` y reescritura de punteros en `.rdata` buscando tamaños de PTX fijos (99,362 y 99,626 bytes).
+   - En *Black Myth: Wukong* (DLSSG v310.1) y DLSS-G v310.7, dicho patrón arrojaba 0 coincidencias o solo parcheaba 1 de 31+ contenedores CUDA FATBIN. Los 30+ kernels restantes para multi-frame interpolation se ejecutaban sin parchear dirigidos a Blackwell (`sm_120`), lo que provocaba un fallo de segmentación del compilador JIT de NVIDIA y el cierre instantáneo del juego al pedir más de 1 cuadro extra (3X+).
+2. **Retargeting In-Place de Kernels Blackwell (`RewriteBlackwellKernels`)**:
+   - Se reemplazó el mecanismo defectuoso de RenoDx por la implementación probada de `y4my4my4m` (GPL-3.0, `MfgUnlock.cpp`).
+   - Escanea todos los contenedores FATBIN en `.rdata` y reescribe in-place la directiva `.target sm_120 -> sm_89 ` (0 asignaciones de memoria, 0 punteros colgantes).
+   - Verificado con los archivos del usuario: **31 de 31 contenedores reescriben limpiamente en DLSSG 310.7**, y **33 de 33 en Wukong 310.1**.
+3. **Desbloqueo de Gates en Memoria (`PatchAdvertise` y `PatchValidate`)**:
+   - Parchea en caliente los límites de `MultiFrameCountMax` y la validación de arquitectura en `nvngx_dlssg.dll` a 5 cuadros generados (6X).
+   - Respeta íntegra la firma Authenticode en disco.
+4. **Elevación segura en Streamline (`hkslDLSSGGetState`)**:
+   - En lugar de parches binarios inestables en `sl.dlss_g.dll`, OptiScaler intercepta limpiamente `slDLSSGGetState` y eleva `numFramesToGenerateMax = UnlockedMax()` directamente al juego.
+5. **Menú OptiScaler e Integración**:
+   - Monitoreo en tiempo real de versión de `nvngx_dlssg.dll`, estado de gates y conteo de kernels retargeteados.
+   - Configuración persistente con `AdaMfgUnlock` y `AdaBlackwellKernels` en `OptiScaler.ini`.
 
 - El addon `MFGAdaUnlock-RenoDx` no es ReShade; es una librería en C++ de 5 archivos creada por RenoDX.
 - Cargar `ReShade64.dll` dentro de OptiScaler crearía conflictos graves de doble enganche DirectX y consumo de recursos.

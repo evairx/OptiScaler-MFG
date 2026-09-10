@@ -773,7 +773,7 @@
     <ClInclude Include="proxies\Streamline_Proxy.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="framegen\dlssg\AdaMFGUnlock.h">
+    <ClInclude Include="framegen\dlssg\MfgUnlock.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="framegen\dlssg\DLSSG_Dx12.h">
@@ -1355,7 +1355,7 @@
     <ClCompile Include="misc\IdentifyGpu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="framegen\dlssg\AdaMFGUnlock.cpp">
+    <ClCompile Include="framegen\dlssg\MfgUnlock.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="framegen\dlssg\DLSSG_Dx12.cpp">

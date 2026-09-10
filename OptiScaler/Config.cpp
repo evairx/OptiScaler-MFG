@@ -206,7 +206,12 @@ bool Config::Reload(std::filesystem::path iniPath)
                 (FGDLSSGInterpolationCount.value() < 1 || FGDLSSGInterpolationCount.value() > 6))
                 FGDLSSGInterpolationCount.reset();
 
-            FGDLSSGUnlockAdaMFG.set_from_config(readBool("DLSSG", "UnlockAdaMFG"));
+            auto adaUnlock = readBool("DLSSG", "AdaMfgUnlock");
+            if (!adaUnlock.has_value())
+                adaUnlock = readBool("DLSSG", "UnlockAdaMFG");
+            FGDLSSGAdaMfgUnlock.set_from_config(adaUnlock);
+            FGDLSSGUnlockAdaMFG.set_from_config(adaUnlock);
+            FGDLSSGAdaBlackwellKernels.set_from_config(readBool("DLSSG", "AdaBlackwellKernels"));
             FGDLSSGQualityGuard.set_from_config(readBool("DLSSG", "QualityGuard"));
             FGDLSSGForceFlipMeteringOff.set_from_config(readBool("DLSSG", "ForceFlipMeteringOff"));
             FGDLSSGUseGamesReflexMarkers.set_from_config(readBool("DLSSG", "UseGamesReflexMarkers"));
@@ -951,8 +956,12 @@ bool Config::SaveIni()
     }
 
     {
+        ini.SetValue("DLSSG", "AdaMfgUnlock",
+                     GetBoolValue(Instance()->FGDLSSGAdaMfgUnlock.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "AdaBlackwellKernels",
+                     GetBoolValue(Instance()->FGDLSSGAdaBlackwellKernels.value_for_config()).c_str());
         ini.SetValue("DLSSG", "UnlockAdaMFG",
-                     GetBoolValue(Instance()->FGDLSSGUnlockAdaMFG.value_for_config()).c_str());
+                     GetBoolValue(Instance()->FGDLSSGAdaMfgUnlock.value_for_config()).c_str());
         ini.SetValue("DLSSG", "QualityGuard",
                      GetBoolValue(Instance()->FGDLSSGQualityGuard.value_for_config()).c_str());
         ini.SetValue("DLSSG", "ForceFlipMeteringOff",
