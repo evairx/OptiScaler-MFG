@@ -345,7 +345,7 @@ bool Manager::IsCeilingPatched() {
 }
 
 bool Manager::IsPacingReady() {
-    return s_flipMeteringPatched.load(std::memory_order_relaxed) || s_ceilingPatched.load(std::memory_order_relaxed);
+    return s_ceilingPatched.load(std::memory_order_relaxed);
 }
 
 uint32_t Manager::GetCeilingEffective() {
@@ -413,10 +413,16 @@ bool Manager::PatchArchGatesInModule(HMODULE mod) {
     if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
 
     auto primaryGpu = IdentifyGpu::getPrimaryGpu();
-    uint8_t kArchNew = 0x70; // Ampere 0x170 by default (passes Ampere 0x170, Ada 0x190, Blackwell 0x1B0)
-    if (primaryGpu.vendorId == VendorId::Nvidia &&
-        primaryGpu.nvidiaArchInfo.architecture_id == NV_GPU_ARCHITECTURE_TU100) {
-        kArchNew = 0x60; // Turing 0x160
+    uint8_t kArchNew = 0x90; // Ada 0x190 by default (matching ReShade exactly)
+    if (primaryGpu.vendorId == VendorId::Nvidia) {
+        if (primaryGpu.nvidiaArchInfo.architecture_id == NV_GPU_ARCHITECTURE_TU100) {
+            kArchNew = 0x60; // Turing 0x160
+        } else if (primaryGpu.nvidiaArchInfo.architecture_id < NV_GPU_ARCHITECTURE_AD100 &&
+                   primaryGpu.nvidiaArchInfo.architecture_id >= NV_GPU_ARCHITECTURE_GA100) {
+            kArchNew = 0x70; // Ampere 0x170
+        } else {
+            kArchNew = 0x90; // Ada 0x190
+        }
     }
     constexpr uint8_t kArchOld = 0xB0; // Blackwell
 
@@ -755,7 +761,6 @@ bool Manager::PatchFlipMeteringInModule(HMODULE mod) {
     LOG_INFO("AdaMFGUnlock: forced flip-metering off in DLSS-G plugin (pinned field +0x{:X} to {} at {} sites); multi-frame will pace in software (RSYNC).",
              want_offset, want_value, s_flipSites.size());
 
-    PatchFrameCountCeiling(mod);
     return true;
 }
 
@@ -768,7 +773,12 @@ bool Manager::PatchNvngxDlssg(HMODULE dlssgModule) {
 
 bool Manager::PatchDlssgPlugin(HMODULE pluginModule) {
     if (!pluginModule || !s_enabled.load()) return false;
-    return PatchFlipMeteringInModule(pluginModule);
+    bool ceilingOk = PatchFrameCountCeiling(pluginModule);
+    bool flipOk = false;
+    if (Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default()) {
+        flipOk = PatchFlipMeteringInModule(pluginModule);
+    }
+    return ceilingOk || flipOk;
 }
 
 void Manager::OnModuleLoaded(HMODULE mod, const wchar_t* path) {
@@ -795,6 +805,8 @@ void Manager::OnModuleLoaded(HMODULE mod, const wchar_t* path) {
         } else if (lower.find(L"sl.dlss_g") != std::wstring::npos ||
                    lower.find(L"sl_dlss_g") != std::wstring::npos) {
             PatchDlssgPlugin(mod);
+        } else if (!s_ceilingPatched.load()) {
+            PatchDlssgPlugin(mod);
         }
     }
 }
@@ -809,13 +821,13 @@ void Manager::CheckAndPatchAll() {
         if (dlssg) PatchNvngxDlssg(dlssg);
     }
 
-    if (!s_flipMeteringPatched.load()) {
+    if (!s_ceilingPatched.load()) {
         HMODULE plugin = GetModuleHandleW(L"sl.dlss_g.dll");
         if (plugin) PatchDlssgPlugin(plugin);
     }
 
     // If any component is still not patched, scan all loaded process modules (handles OTA hashed DLL names)
-    if (!s_flipMeteringPatched.load() || !s_archPatched.load() || !s_midpointPatched.load()) {
+    if (!s_ceilingPatched.load() || !s_archPatched.load() || !s_midpointPatched.load()) {
         HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
         if (snap != INVALID_HANDLE_VALUE) {
             MODULEENTRY32W me = {};
@@ -828,16 +840,8 @@ void Manager::CheckAndPatchAll() {
                         PatchNvngxDlssg(me.hModule);
                     }
 
-                    if (!s_flipMeteringPatched.load()) {
-                        wchar_t fullPath[MAX_PATH] = {};
-                        GetModuleFileNameW(me.hModule, fullPath, MAX_PATH);
-                        std::wstring pathLower(fullPath);
-                        for (auto& c : pathLower) c = towlower(c);
-
-                        if (pathLower.find(L"sl.dlss_g") != std::wstring::npos ||
-                            pathLower.find(L"sl_dlss_g") != std::wstring::npos) {
-                            PatchDlssgPlugin(me.hModule);
-                        }
+                    if (!s_ceilingPatched.load()) {
+                        PatchDlssgPlugin(me.hModule);
                     }
                 } while (Module32NextW(snap, &me));
             }

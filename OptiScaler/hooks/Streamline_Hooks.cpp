@@ -427,40 +427,6 @@ sl::Result StreamlineHooks::hkslSetTag(const sl::ViewportHandle& viewport, const
         }
     }
 
-    const bool isMultiFrameActive = (lastDlssgOptions.numFramesToGenerate > 1) ||
-                                    (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value() &&
-                                     Config::Instance()->FGDLSSGOverrideInterpolationCount.value() > 1);
-
-    if (Config::Instance()->FGDLSSGQualityGuard.value_or_default() && isMultiFrameActive && numTags > 0 && tags != nullptr)
-    {
-        bool hasHudSeparation = false;
-        for (uint32_t i = 0; i < numTags; i++)
-        {
-            if (tags[i].type == sl::kBufferTypeHUDLessColor ||
-                tags[i].type == sl::kBufferTypeUIColorAndAlpha ||
-                tags[i].type == sl::kBufferTypeUIAlpha)
-            {
-                hasHudSeparation = true;
-                break;
-            }
-        }
-
-        if (hasHudSeparation)
-        {
-            std::vector<sl::ResourceTag> filteredTags(tags, tags + numTags);
-            for (auto& tag : filteredTags)
-            {
-                if (tag.type == sl::kBufferTypeHUDLessColor ||
-                    tag.type == sl::kBufferTypeUIColorAndAlpha ||
-                    tag.type == sl::kBufferTypeUIAlpha)
-                {
-                    tag.resource = nullptr;
-                }
-            }
-            return o_slSetTag(viewport, filteredTags.data(), numTags, cmdBuffer);
-        }
-    }
-
     auto result = o_slSetTag(viewport, tags, numTags, cmdBuffer);
     return result;
 }
@@ -538,40 +504,6 @@ sl::Result StreamlineHooks::hkslSetTagForFrame(const sl::FrameToken& frame, cons
         else if (State::Instance().activeFgInput == FGInput::NvngxFG)
         {
             LOG_TRACE("Tagging resource of type: {}", magic_enum::enum_name(typeEnum));
-        }
-    }
-
-    const bool isMultiFrameActive = (lastDlssgOptions.numFramesToGenerate > 1) ||
-                                    (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value() &&
-                                     Config::Instance()->FGDLSSGOverrideInterpolationCount.value() > 1);
-
-    if (Config::Instance()->FGDLSSGQualityGuard.value_or_default() && isMultiFrameActive && numResources > 0 && resources != nullptr)
-    {
-        bool hasHudSeparation = false;
-        for (uint32_t i = 0; i < numResources; i++)
-        {
-            if (resources[i].type == sl::kBufferTypeHUDLessColor ||
-                resources[i].type == sl::kBufferTypeUIColorAndAlpha ||
-                resources[i].type == sl::kBufferTypeUIAlpha)
-            {
-                hasHudSeparation = true;
-                break;
-            }
-        }
-
-        if (hasHudSeparation)
-        {
-            std::vector<sl::ResourceTag> filteredResources(resources, resources + numResources);
-            for (auto& tag : filteredResources)
-            {
-                if (tag.type == sl::kBufferTypeHUDLessColor ||
-                    tag.type == sl::kBufferTypeUIColorAndAlpha ||
-                    tag.type == sl::kBufferTypeUIAlpha)
-                {
-                    tag.resource = nullptr;
-                }
-            }
-            return o_slSetTagForFrame(frame, viewport, filteredResources.data(), numResources, cmdBuffer);
         }
     }
 
@@ -1184,6 +1116,12 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 
     newOptions.structVersion = newStructVer;
 
+    if (Config::Instance()->FGDLSSGQualityGuard.value_or_default() ||
+        Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    {
+        newOptions.enableUserInterfaceRecomposition = sl::Boolean::eTrue;
+    }
+
     auto& state = State::Instance();
 
     // Disable game's DLSSG when we are trying to create our own instance of DLSSG
@@ -1282,6 +1220,13 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
     state.dlssgLastSetMode = newOptions.mode;
 
     sl::Result result = o_slDLSSGSetOptions(viewport, newOptions);
+    if (result != sl::Result::eOk && newOptions.enableUserInterfaceRecomposition == sl::Boolean::eTrue)
+    {
+        LOG_WARN("StreamlineHooks: UI recomposition rejected with sl::Result {:X}, retrying with original UI setting", (uint32_t)result);
+        newOptions.enableUserInterfaceRecomposition = options.structVersion >= 4 ? options.enableUserInterfaceRecomposition : sl::Boolean::eFalse;
+        result = o_slDLSSGSetOptions(viewport, newOptions);
+    }
+
     if (result != sl::Result::eOk && newOptions.numFramesToGenerate > 1)
     {
         // DLSS-G can return eErrorFeatureManagerInvalidState on the first attempt when activating.
