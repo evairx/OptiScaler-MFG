@@ -252,6 +252,10 @@ del /Q $(SolutionDir)x64\Release\a\Licenses\*.*
 copy $(SolutionDir)external\xess\LICENSE.txt $(SolutionDir)x64\Release\a\Licenses\XeSS_LICENSE.txt /Y
 md $(SolutionDir)x64\Release\a\OptiScaler
 copy $(SolutionDir)external\xess\bin\*.dll $(SolutionDir)x64\Release\a\OptiScaler\ /Y
+copy $(SolutionDir)external\dlss\*.dll $(SolutionDir)x64\Release\a\OptiScaler\ /Y
+md $(SolutionDir)x64\Release\a\OptiScaler\streamline\
+copy $(SolutionDir)external\streamline_bin\*.dll $(SolutionDir)x64\Release\a\OptiScaler\streamline\ /Y
+copy $(SolutionDir)external\dlss\nvngx_dlssg.dll $(SolutionDir)x64\Release\a\OptiScaler\streamline\ /Y
 copy $(SolutionDir)external\FidelityFX-SDK\docs\license.md $(SolutionDir)x64\Release\a\OptiScaler\Licenses\FidelityFX_v1_LICENSE.md /Y
 copy $(SolutionDir)external\FidelityFX-SDK\PrebuiltSignedDLL\amd_fidelityfx_vk.dll $(SolutionDir)x64\Release\a\OptiScaler\ /Y
 copy $(SolutionDir)external\FidelityFX-SDK-v2\Kits\FidelityFX\signedbin\amd_fidelityfx_loader_dx12.dll $(SolutionDir)x64\Release\a\OptiScaler\ /Y

@@ -419,6 +419,8 @@ FodyWeavers.xsd
 *.dll
 
 !external/directx_agility_sdk/lib/D3D12Core.dll
+!external/dlss/*.dll
+!external/streamline_bin/*.dll
 
 # Fortran module files
 *.mod

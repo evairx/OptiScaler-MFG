@@ -3325,6 +3325,16 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
         {
             ImGui::TableNextColumn();
 
+            // Auto switch from FSR FG to DLSSG if user is selecting Ada MFG or on RTX with DLSSG
+            if (config->FGOutput == FGOutput::DLSSG &&
+                (config->FGInput == FGInput::FSRFG || config->FGInput == FGInput::FSRFG30))
+            {
+                if (state.streamlineVersion.major > 0)
+                    config->FGInput = FGInput::DLSSG;
+                else
+                    config->FGInput = FGInput::Upscaler;
+            }
+
             PopulateCombo("FG Input", config->FGInput, inputOptions);
             ShowTooltip("The data source to be used for FG\n"
                         "The native FG which the game supports");
@@ -3339,8 +3349,21 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             }
             else
             {
+                auto oldOutput = config->FGOutput.value_or_default();
                 PopulateCombo("FG Output", config->FGOutput, outputOptions);
                 ShowTooltip("The FG that you will actually be using");
+
+                // If user just switched to DLSSG Output, automatically ensure input is not FSRFG
+                if (config->FGOutput == FGOutput::DLSSG && oldOutput != FGOutput::DLSSG)
+                {
+                    if (config->FGInput == FGInput::FSRFG || config->FGInput == FGInput::FSRFG30)
+                    {
+                        if (state.streamlineVersion.major > 0)
+                            config->FGInput = FGInput::DLSSG;
+                        else
+                            config->FGInput = FGInput::Upscaler;
+                    }
+                }
             }
 
             ImGui::EndTable();
@@ -3376,107 +3399,111 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             ImGui::Spacing();
         }
 
-        const bool dlssgInputOrOutput =
-            state.activeFgOutput == FGOutput::DLSSG || state.activeFgInput == FGInput::DLSSG;
+        // Only show Ada MFG settings if FG Output is DLSSG, or native DLSSG/Streamline is active
+        const bool isOtherFgOutput = (config->FGOutput == FGOutput::FSRFG || config->FGOutput == FGOutput::XeFG);
+        const bool isAdaMfgActive = !isOtherFgOutput && (config->FGOutput == FGOutput::DLSSG ||
+                                                        config->FGInput == FGInput::DLSSG ||
+                                                        state.streamlineVersion.major > 0);
 
-        ImGui::BeginDisabled(state.dlssgGameDMFGSupported && config->FGDLSSGOverrideForceDMFG.value_or_default());
-        if (state.dlssgMfgMax.has_value() && state.dlssgMfgMax.value() >= 1 && !dlssgInputOrOutput)
+        if (isAdaMfgActive)
         {
-            auto maxInterpolationCount = state.dlssgMfgMax.value();
+            ImGui::Spacing();
+            ImGui::SeparatorText("NVIDIA Ada MFG (RTX 40 / 50)");
 
-            if (maxInterpolationCount >= 1)
-            {
-                const char* intModes[] = { "Default", "Off", "2X", "3X", "4X", "5X", "6X" };
-
-                // Map config value to UI index
-                int currentSet = 0;
-                if (config->FGDLSSGOverrideInterpolationCount.has_value())
-                {
-                    currentSet = config->FGDLSSGOverrideInterpolationCount.value() + 1;
-                }
-
-                const char* currentIntCount = intModes[currentSet];
-
-                ImGui::PushItemWidth(95.0f * menuResScale);
-
-                if (ImGui::BeginCombo("Override DLSSG Ratio", currentIntCount))
-                {
-                    for (int i = 0; i <= maxInterpolationCount + 1; i++)
-                    {
-                        if (ImGui::Selectable(intModes[i], (currentSet == i)))
-                        {
-                            if (i == 0)
-                            {
-                                // Default, no override
-                                config->FGDLSSGOverrideInterpolationCount.reset();
-                            }
-                            else
-                            {
-                                // UI index, store value
-                                int framesToGenerate = i - 1;
-
-                                LOG_DEBUG("DLSSG Interpolation Count set to: {}", framesToGenerate);
-                                config->FGDLSSGOverrideInterpolationCount = framesToGenerate;
-                            }
-
-                            StreamlineHooks::updateDlssgOptions();
-                        }
-                    }
-
-                    ImGui::EndCombo();
-                }
-
-                ImGui::PopItemWidth();
-            }
-        }
-
-        ImGui::EndDisabled();
-
-        if (state.activeFgOutput == FGOutput::DLSSG || state.activeFgInput == FGInput::DLSSG || state.streamlineVersion.major > 0)
-        {
-            if (bool unlockAda = config->FGDLSSGUnlockAdaMFG.value_or_default();
-                ImGui::Checkbox("Unlock Ada MFG (RTX 40)", &unlockAda))
+            // 1. Top: Unlock Ada MFG Checkbox
+            bool unlockAda = config->FGDLSSGUnlockAdaMFG.value_or_default();
+            if (ImGui::Checkbox("Unlock Ada MFG (RTX 40)", &unlockAda))
             {
                 config->FGDLSSGUnlockAdaMFG = unlockAda;
                 AdaMFGUnlock::Manager::SetEnabled(unlockAda);
                 if (unlockAda)
                     AdaMFGUnlock::Manager::CheckAndPatchAll();
             }
-            ShowHelpMarker("Unlocks NVIDIA DLSS Multi-Frame Generation (3X, 4X, 6X) on RTX 40 series using Tensor Cores without ReShade");
-        }
+            ShowHelpMarker("Unlocks NVIDIA DLSS Multi-Frame Generation (2X, 3X, 4X, 6X) on RTX 40 series using Tensor Cores without ReShade");
 
-        if (state.dlssgGameDMFGSupported && !dlssgInputOrOutput)
-        {
-            ImGui::SameLine(0.0f, 16.0f);
+            // 2. Below: Multi-Frame Variants / Multiplier
+            ImGui::BeginDisabled(!unlockAda);
 
-            if (bool dynamicMFG = config->FGDLSSGOverrideForceDMFG.value_or_default();
-                ImGui::Checkbox("Force Dynamic MFG", &dynamicMFG))
+            const char* ratioModes[] = { "Default (Game)", "2X (1 extra frame)", "3X (2 extra frames)", "4X (3 extra frames)", "5X (4 extra frames)", "6X (5 extra frames)" };
+
+            int currentRatio = 0; // Default
+            if (config->FGDLSSGOverrideInterpolationCount.has_value())
             {
-                config->FGDLSSGOverrideForceDMFG = dynamicMFG;
-                StreamlineHooks::updateDlssgOptions();
+                currentRatio = config->FGDLSSGOverrideInterpolationCount.value() + 1;
+            }
+            else if (config->FGDLSSGInterpolationCount.has_value() && config->FGDLSSGInterpolationCount.value() >= 1)
+            {
+                currentRatio = config->FGDLSSGInterpolationCount.value();
             }
 
-            ImGui::BeginDisabled(state.dlssgLastSetMode != sl::DLSSGMode::eDynamic);
-            static float fpsTarget = config->FGDLSSGFramerateTargetDMFG.value_or_default();
-            ImGui::SliderFloat("DMFG FPS Target", &fpsTarget, 0, 200, "%.0f");
+            if (currentRatio < 0 || currentRatio >= 6)
+                currentRatio = 0;
 
-            ShowHelpMarker("An active limit of 0 means auto-detect the display refresh rate");
-
-            if (ImGui::Button("Apply Target"))
+            ImGui::PushItemWidth(175.0f * menuResScale);
+            if (ImGui::BeginCombo("Multi-Frame Ratio", ratioModes[currentRatio]))
             {
-                config->FGDLSSGFramerateTargetDMFG = fpsTarget;
-                StreamlineHooks::updateDlssgOptions();
+                for (int i = 0; i < 6; i++)
+                {
+                    if (ImGui::Selectable(ratioModes[i], currentRatio == i))
+                    {
+                        if (i == 0)
+                        {
+                            config->FGDLSSGOverrideInterpolationCount.reset();
+                            config->FGDLSSGInterpolationCount = 1;
+                        }
+                        else
+                        {
+                            int framesToGen = i;
+                            config->FGDLSSGOverrideInterpolationCount = framesToGen - 1;
+                            config->FGDLSSGInterpolationCount = framesToGen;
+                            LOG_DEBUG("DLSSG Interpolation Count set to: {}", framesToGen);
+                        }
+                        StreamlineHooks::updateDlssgOptions();
+                    }
+                }
+                ImGui::EndCombo();
             }
-
-            ImGui::SameLine(0.0f, 16.0f);
-
-            if (ImGui::Button("Reset Target"))
-            {
-                fpsTarget = 0.0f;
-                config->FGDLSSGFramerateTargetDMFG.reset();
-            }
+            ImGui::PopItemWidth();
+            ShowHelpMarker("Select multi-frame generation multiplier (3X, 4X, 6X) running natively on Ada Tensor Cores");
 
             ImGui::EndDisabled();
+
+            if (!unlockAda)
+            {
+                ImGui::TextDisabled("(! ) Unlock Ada MFG must be enabled to use multi-frame variants (3X, 4X, 6X)");
+            }
+
+            if (state.dlssgGameDMFGSupported && config->FGOutput != FGOutput::DLSSG)
+            {
+                if (bool dynamicMFG = config->FGDLSSGOverrideForceDMFG.value_or_default();
+                    ImGui::Checkbox("Force Dynamic MFG", &dynamicMFG))
+                {
+                    config->FGDLSSGOverrideForceDMFG = dynamicMFG;
+                    StreamlineHooks::updateDlssgOptions();
+                }
+
+                ImGui::BeginDisabled(state.dlssgLastSetMode != sl::DLSSGMode::eDynamic);
+                static float fpsTarget = config->FGDLSSGFramerateTargetDMFG.value_or_default();
+                ImGui::SliderFloat("DMFG FPS Target", &fpsTarget, 0, 200, "%.0f");
+
+                ShowHelpMarker("An active limit of 0 means auto-detect the display refresh rate");
+
+                if (ImGui::Button("Apply Target"))
+                {
+                    config->FGDLSSGFramerateTargetDMFG = fpsTarget;
+                    StreamlineHooks::updateDlssgOptions();
+                }
+
+                ImGui::SameLine(0.0f, 16.0f);
+
+                if (ImGui::Button("Reset Target"))
+                {
+                    fpsTarget = 0.0f;
+                    config->FGDLSSGFramerateTargetDMFG.reset();
+                }
+
+                ImGui::EndDisabled();
+            }
         }
 
         auto fgOutput = reinterpret_cast<IFGFeature_Dx12*>(state.currentFG);
