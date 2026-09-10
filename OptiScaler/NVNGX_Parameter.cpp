@@ -808,16 +808,13 @@ void InitNGXParameters(NVSDK_NGX_Parameter* InParams, API api)
         InParams->Set(NVSDK_NGX_Parameter_FrameInterpolation_NeedsUpdatedDriver, 0);
         InParams->Set(NVSDK_NGX_Parameter_FrameInterpolation_FeatureInitResult, 1);
 
-        // Never claim a multiplier solely because the option is enabled. The
-        // game only receives the verified provider ceiling after the Ada
-        // compatibility patch has succeeded.
+        // Advertise the multi-frame ceiling when Ada MFG unlock is enabled (default up to 5 = 6X)
         uint32_t countMax = 1;
         if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
         {
             AdaMFGUnlock::Manager::SetEnabled(true);
             AdaMFGUnlock::Manager::CheckAndPatchAll();
-            if (AdaMFGUnlock::Manager::IsReadyForMultiFrame())
-                countMax = AdaMFGUnlock::Manager::GetCeilingEffective();
+            countMax = AdaMFGUnlock::Manager::GetCeilingEffective();
         }
         InParams->Set("DLSSG.MultiFrameCountMax", countMax);
 

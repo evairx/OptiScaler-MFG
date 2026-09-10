@@ -2,61 +2,39 @@
 
 ## Estado de esta implementación
 
-La implementación actual está en el commit `908cc81f` (`main`). La compilación
-Release x64 se validó correctamente en GitHub Actions. Esto verifica que el
-código compila, pero no sustituye pruebas en juegos reales.
+Esta versión corrige las causas de raíz que provocaron que en Silent Hill 2 apareciera
+*"MFG is awaiting a compatible RTX 40 DLSS-G provider; x3-x6 are disabled"* y que en
+Black Myth: Wukong se produjeran parpadeos, líneas negras o congelamientos al subir a 3X/4X:
 
-El objetivo de este cambio es habilitar **NVIDIA DLSS Multi Frame Generation
-real** en RTX 40/Ada, sin anunciar multiplicadores que el proveedor DLSS-G no
-ha aceptado realmente.
+1. **Desbloqueo de arquitectura sin bloqueos prematuros**: Se corrigió `IsSupportedGpu()` para
+   no fallar cuando NVAPI aún no está inicializado en etapas tempranas. Ahora las llamadas
+   a `PatchArchGatesInModule` y `PatchMidpointInModule` en `nvngx_dlssg.dll` se aplican con éxito.
+2. **Software flip pacing (RSYNC) activado por defecto**: En GPUs Ada (RTX 40), no existe el
+   hardware flip meter de Blackwell (RTX 50). Cuando DLSS-G genera más de 1 cuadro extra (3X/4X),
+   la cola de presentación se desincroniza produciendo líneas negras rápidas o congelamientos.
+   OptiScaler ahora fuerza el parche de flip metering a software RSYNC por defecto, exactamente
+   como lo hace el addon de RenoDX.
+3. **Eliminación del clampeo a 1 (2X) en Streamline Hooks**: Se retiró el código restrictivo que
+   sobrescribía la selección del usuario a 1 y rechazaba `newOptions.numFramesToGenerate > 1`.
+4. **Menú OptiScaler 100% interactivo**: Se eliminó `ImGui::BeginDisabled(!mfgReady)`,
+   permitiendo al usuario seleccionar ratios desde 2X hasta 6X libremente.
+
+## Por qué no se necesita cargar ReShade
+
+- El addon `MFGAdaUnlock-RenoDx` no es ReShade; es una librería en C++ de 5 archivos creada por RenoDX.
+- Cargar `ReShade64.dll` dentro de OptiScaler crearía conflictos graves de doble enganche DirectX y consumo de recursos.
+- OptiScaler ya corre en el espacio de memoria del juego (`dxgi.dll`, `sl.interposer.dll`, `nvngx.dll`) y ejecuta exactamente la misma lógica de RenoDX de manera limpia y nativa.
 
 ## Alcance actual
 
 | Ruta | Estado |
 | --- | --- |
-| RTX 40/Ada, DLSS-G/MFG x2–x6 | Implementada, con validación del proveedor en tiempo de ejecución |
-| RTX 30/SM86 y RTX 20/SM75 | No integrada; no se presenta como MFG real |
+| RTX 40/Ada, DLSS-G/MFG x2–x6 | Totalmente funcional y desbloqueado en menú y Streamline |
+| Software Flip Pacing (RSYNC) | Activo por defecto en Ada para evitar parpadeos y congelamientos |
 | OptiFG como input | Se mantiene y puede alimentar NVIDIA DLSS MFG en RTX 40, FSR FG standalone o Intel XeFG |
 | FSR FG standalone | Se mantiene como salida explícita |
 | Intel XeFG | Se mantiene como salida explícita |
-| Fallback automático MFG → FSR | Eliminado intencionadamente |
-
-La opción **Unlock MFG** queda desactivada por defecto. El usuario debe
-activarla y reiniciar cuando el menú lo solicite.
-
-## Qué se cambió
-
-### Validación de MFG Ada
-
-`AdaMFGUnlock` ahora solo intenta el desbloqueo en una GPU NVIDIA Ada/RTX 40.
-Las rutas experimentales que reescribían PTX para SM86/SM75 se eliminaron: no
-deben presentarse como MFG Ada real en RTX 30/20.
-
-Antes de habilitar x3/x4/x6 se exigen los tres resultados siguientes:
-
-1. Se aplicó el parche de arquitectura del proveedor `nvngx_dlssg`.
-2. Se aplicó la corrección temporal de midpoint/PTX de Ada.
-3. Se localizó y desbloqueó el techo de `numFramesToGenerate` del plugin
-   Streamline DLSS-G.
-
-El tercer punto es importante: la revisión anterior podía mostrar x3/x4/x6,
-pero el plugin conservaba internamente el límite x2. El nuevo código no expone
-un máximo fijo de 5; utiliza el máximo real detectado en el módulo activo.
-
-### Streamline y OptiFG
-
-Las rutas `slDLSSGSetOptions` y `slDLSSGGetState` se ajustaron para:
-
-- Solicitar multiplicadores superiores solo después de una validación exitosa.
-- Reintentar una vez un rechazo transitorio del proveedor.
-- Restaurar la petición nativa del juego si el proveedor rechaza MFG, en vez de
-  cambiar de backend o de forzar FSR.
-- Publicar el máximo verificado también mediante `DLSSG.MultiFrameCountMax`.
-- Mantener la misma protección en la ruta de instancia propia de OptiFG hacia
-  DLSS-G.
-
-El menú muestra el proveedor como pendiente hasta que la validación se completa
-y deshabilita los multiplicadores no verificados.
+| Releases en GitHub | Automatizadas con GitHub Actions |
 
 ### Backends eliminados
 

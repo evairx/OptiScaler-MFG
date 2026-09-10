@@ -597,7 +597,7 @@ class Config
     // DLSSG
     CustomOptional<bool> FGDLSSGUnlockAdaMFG { false };         // Opt-in real NVIDIA Ada (RTX 40) MFG unlock
     CustomOptional<bool> FGDLSSGQualityGuard { true };          // Quality Guard: filters mismatched HUD separation in 3X/4X to prevent flickering
-    CustomOptional<bool> FGDLSSGForceFlipMeteringOff { false };  // Force legacy software flip pacing (only enable if presentation freezes)
+    CustomOptional<bool> FGDLSSGForceFlipMeteringOff { true };  // Software flip pacing (RSYNC) for Ada multi-frame (prevents presentation freezes and black lines in 3X/4X)
     CustomOptional<int> FGDLSSGInterpolationCount { 1 };        // For Opti's own SL instance
     CustomOptional<bool> FGDLSSGUseGamesReflexMarkers { true };
     CustomOptional<int, NoDefault>

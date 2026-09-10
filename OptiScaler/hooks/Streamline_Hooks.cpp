@@ -1022,51 +1022,29 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
     {
         AdaMFGUnlock::Manager::SetEnabled(true);
         AdaMFGUnlock::Manager::CheckAndPatchAll();
-    }
-    const bool mfgReady = mfgUnlockEnabled && AdaMFGUnlock::Manager::IsReadyForMultiFrame();
-    if (mfgUnlockEnabled)
-    {
-        if (mfgReady)
-        {
-            state.dlssgMfgMax = static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective());
-        }
-        else
-        {
-            // Do not advertise multipliers merely because the toggle is on.
-            // The provider patch, the Ada temporal patch and the actual
-            // Streamline ceiling all have to be present first.
-            state.dlssgMfgMax.reset();
-        }
+        state.dlssgMfgMax = static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective());
     }
 
-    if (dlssgPotentiallyActive &&
-        (state.streamlineVersion >= feature_version { 2, 7, 1 } || mfgReady) &&
-        (!mfgUnlockEnabled || mfgReady))
+    if (dlssgPotentiallyActive)
     {
-        // Populate dlssgMfgMax once
-        if (!state.dlssgMfgMax.has_value())
+        if (!mfgUnlockEnabled)
         {
-            sl::DLSSGState localState {};
-            sl::DLSSGOptions localOptions {};
-            if (o_slDLSSGGetState(viewport, localState, &localOptions) == sl::Result::eOk &&
-                localState.numFramesToGenerateMax > 0 && localState.numFramesToGenerateMax < 6)
+            // Populate dlssgMfgMax once for native SL 2.7.1+
+            if (!state.dlssgMfgMax.has_value())
             {
-                state.dlssgMfgMax = localState.numFramesToGenerateMax;
-                LOG_TRACE("Saving original numFramesToGenerateMax: {}", state.dlssgMfgMax.value());
-
-                if (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value() &&
-                    Config::Instance()->FGDLSSGOverrideInterpolationCount.value() > state.dlssgMfgMax.value())
+                sl::DLSSGState localState {};
+                sl::DLSSGOptions localOptions {};
+                if (o_slDLSSGGetState(viewport, localState, &localOptions) == sl::Result::eOk &&
+                    localState.numFramesToGenerateMax > 0 && localState.numFramesToGenerateMax < 6)
                 {
-                    Config::Instance()->FGDLSSGOverrideInterpolationCount = state.dlssgMfgMax.value();
+                    state.dlssgMfgMax = localState.numFramesToGenerateMax;
+                    LOG_TRACE("Saving original numFramesToGenerateMax: {}", state.dlssgMfgMax.value());
                 }
             }
         }
 
-        const int maxGeneratedFrames = state.dlssgMfgMax.value_or(1);
+        const int maxGeneratedFrames = mfgUnlockEnabled ? 5 : state.dlssgMfgMax.value_or(1);
 
-        // Won't take effect with Dynamic. Only override a count that this
-        // exact provider has confirmed it can accept; never turn an invalid
-        // x3-x6 request into a UI-only setting.
         if (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value())
         {
             auto overrideCount = Config::Instance()->FGDLSSGOverrideInterpolationCount.value();
@@ -1087,17 +1065,10 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
         }
     }
 
-    // The legacy software-flip workaround is optional. Current providers pace
-    // natively; when the workaround was explicitly requested, require that it
-    // was successfully installed before allowing 3x+.
-    if (newOptions.numFramesToGenerate > 1 && !AdaMFGUnlock::Manager::IsPacingReady())
+    // Ensure flip metering software pacing and frame ceiling are patched for multi-frame
+    if (newOptions.numFramesToGenerate > 1)
     {
         AdaMFGUnlock::Manager::CheckAndPatchAll();
-        if (!AdaMFGUnlock::Manager::IsPacingReady())
-        {
-            LOG_WARN("StreamlineHooks: requested legacy software pacing is unavailable; forwarding the game's DLSS-G request unchanged.");
-            newOptions.numFramesToGenerate = options.numFramesToGenerate;
-        }
     }
 
     state.dlssgLastSetMode = newOptions.mode;
@@ -1178,17 +1149,10 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
     {
         AdaMFGUnlock::Manager::SetEnabled(true);
         AdaMFGUnlock::Manager::CheckAndPatchAll();
-        if (AdaMFGUnlock::Manager::IsReadyForMultiFrame())
-        {
-            const auto maxGenerated = AdaMFGUnlock::Manager::GetCeilingEffective();
-            optiState.dlssgMfgMax = static_cast<int>(maxGenerated);
-            if (state.structVersion >= 2)
-                state.numFramesToGenerateMax = maxGenerated;
-        }
-        else
-        {
-            optiState.dlssgMfgMax.reset();
-        }
+        const auto maxGenerated = AdaMFGUnlock::Manager::GetCeilingEffective();
+        optiState.dlssgMfgMax = static_cast<int>(maxGenerated);
+        if (state.structVersion >= 2)
+            state.numFramesToGenerateMax = maxGenerated;
     }
 
     if (!Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default() &&

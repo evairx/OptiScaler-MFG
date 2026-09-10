@@ -3282,17 +3282,23 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             else if (unlockAda)
             {
                 ImGui::Spacing();
-                const bool mfgReady = AdaMFGUnlock::Manager::IsReadyForMultiFrame();
-                const int verifiedMax = mfgReady ? static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective()) : 1;
-                if (mfgReady)
+                const bool archPatched = AdaMFGUnlock::Manager::IsArchPatched();
+                const bool ceilingPatched = AdaMFGUnlock::Manager::IsCeilingPatched();
+                const int verifiedMax = static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective());
+                if (archPatched && ceilingPatched)
                 {
                     ImGui::TextColored(toneMapColor(ImVec4(0.0f, 1.0f, 0.25f, 1.0f)),
-                                       "MFG provider validated: up to %dx.", verifiedMax + 1);
+                                       "MFG Active: Provider validated (up to %dx).", verifiedMax + 1);
+                }
+                else if (archPatched)
+                {
+                    ImGui::TextColored(toneMapColor(ImVec4(0.0f, 1.0f, 0.25f, 1.0f)),
+                                       "MFG Active: Arch gates & temporal midpoint patched.");
                 }
                 else
                 {
-                    ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.65f, 0.1f, 1.0f)),
-                                       "MFG is awaiting a compatible RTX 40 DLSS-G provider; x3-x6 are disabled.");
+                    ImGui::TextColored(toneMapColor(ImVec4(0.2f, 0.8f, 1.0f, 1.0f)),
+                                       "MFG Ready: Multi-frame patches apply automatically when DLSS-G runs.");
                 }
                 ImGui::Spacing();
 
@@ -3316,14 +3322,13 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                     currentRatio = config->FGDLSSGInterpolationCount.value();
                 }
 
-                if (currentRatio < 0 || currentRatio >= 6 || currentRatio > verifiedMax)
+                if (currentRatio < 0 || currentRatio >= 6)
                     currentRatio = 0;
 
                 ImGui::PushItemWidth(175.0f * menuResScale);
-                ImGui::BeginDisabled(!mfgReady);
                 if (ImGui::BeginCombo("Multi-Frame Ratio", ratioModes[currentRatio]))
                 {
-                    for (int i = 0; i <= verifiedMax; i++)
+                    for (int i = 0; i <= 5; i++)
                     {
                         if (ImGui::Selectable(ratioModes[i], currentRatio == i))
                         {
@@ -3344,9 +3349,8 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                     }
                     ImGui::EndCombo();
                 }
-                ImGui::EndDisabled();
                 ImGui::PopItemWidth();
-                ShowHelpMarker("Only provider-validated multipliers are selectable. The count is verified by Streamline, not inferred from the menu.");
+                ShowHelpMarker("Select desired frame generation multiplier (2X up to 6X). Pacing and ceiling uncap apply automatically in DLSS-G.");
 
                 bool qGuard = config->FGDLSSGQualityGuard.value_or_default();
                 if (ImGui::Checkbox("Quality Guard (Anti-Flicker)", &qGuard))

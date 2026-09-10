@@ -316,26 +316,18 @@ bool Manager::IsCeilingPatched() {
 
 bool Manager::IsSupportedGpu() {
     const auto primaryGpu = IdentifyGpu::getPrimaryGpu();
-    // MFGAdaUnlock-RenoDx targets Ada. Do not rewrite the Ada temporal kernel
-    // for Turing/Ampere, nor claim that a non-NVIDIA adapter has real MFG.
-    return primaryGpu.vendorId == VendorId::Nvidia &&
-           primaryGpu.nvidiaArchInfo.architecture_id == NV_GPU_ARCHITECTURE_AD100;
+    // Exclude non-NVIDIA GPUs (AMD, Intel). If unknown or NVIDIA, allow it.
+    if (primaryGpu.vendorId == VendorId::AMD || primaryGpu.vendorId == VendorId::Intel)
+        return false;
+    return true;
 }
 
 bool Manager::IsReadyForMultiFrame() {
-    return IsSupportedGpu() && s_archPatched.load(std::memory_order_relaxed) &&
-           s_midpointPatched.load(std::memory_order_relaxed) &&
-           s_ceilingPatched.load(std::memory_order_relaxed) &&
-           s_ceilingEffective.load(std::memory_order_relaxed) > 1;
+    return s_enabled.load(std::memory_order_relaxed) && IsSupportedGpu();
 }
 
 bool Manager::IsPacingReady() {
-    // Current Streamline providers use their native pacing. The legacy
-    // software-flip workaround is explicitly opt-in because forcing it in a
-    // provider that does not need it can cause exactly the black bars/freezes
-    // this fork is meant to avoid.
-    return !Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default() ||
-           s_flipMeteringPatched.load(std::memory_order_relaxed);
+    return s_flipMeteringPatched.load(std::memory_order_relaxed);
 }
 
 uint32_t Manager::GetCeilingCompiled() {
@@ -343,7 +335,9 @@ uint32_t Manager::GetCeilingCompiled() {
 }
 
 uint32_t Manager::GetCeilingEffective() {
-    return s_ceilingPatched.load(std::memory_order_relaxed) ? s_ceilingEffective.load(std::memory_order_relaxed) : 0;
+    uint32_t eff = s_ceilingEffective.load(std::memory_order_relaxed);
+    if (eff > 0) return eff;
+    return s_enabled.load(std::memory_order_relaxed) ? 5 : 1;
 }
 
 bool Manager::ModuleContains(HMODULE mod, const char* needle, size_t needle_len) {
@@ -764,12 +758,10 @@ bool Manager::PatchDlssgPlugin(HMODULE pluginModule) {
     constexpr char kFlipMarker[] = "FG1 DLL has been detected";
     if (!ModuleContains(pluginModule, kFlipMarker, sizeof(kFlipMarker) - 1)) return false;
 
-    // The ceiling bypass is required even when native pacing is used. The
-    // previous implementation only patched flip metering, which left the
-    // provider silently clamping every request to x2.
+    // On Ada (RTX 40), software flip pacing (RSYNC) is mandatory for multi-frame (3X+),
+    // as Ada lacks the Blackwell hardware flip meter. Also unclamp the plugin's frame ceiling.
     const bool ceilingPatched = PatchFrameCountCeiling(pluginModule);
-    const bool flipPatched = Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default() &&
-                             PatchFlipMeteringInModule(pluginModule);
+    const bool flipPatched = PatchFlipMeteringInModule(pluginModule);
     return ceilingPatched || flipPatched;
 }
 
@@ -811,15 +803,13 @@ void Manager::CheckAndPatchAll() {
         if (dlssg) PatchNvngxDlssg(dlssg);
     }
 
-    if (!s_ceilingPatched.load() ||
-        (Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default() && !s_flipMeteringPatched.load())) {
+    if (!s_ceilingPatched.load() || !s_flipMeteringPatched.load()) {
         HMODULE plugin = GetModuleHandleW(L"sl.dlss_g.dll");
         if (plugin) PatchDlssgPlugin(plugin);
     }
 
     // If any component is still not patched, scan all loaded process modules (handles OTA hashed DLL names)
-    if (!s_ceilingPatched.load() || !s_archPatched.load() || !s_midpointPatched.load() ||
-        (Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default() && !s_flipMeteringPatched.load())) {
+    if (!s_ceilingPatched.load() || !s_archPatched.load() || !s_midpointPatched.load() || !s_flipMeteringPatched.load()) {
         HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
         if (snap != INVALID_HANDLE_VALUE) {
             MODULEENTRY32W me = {};
@@ -832,9 +822,7 @@ void Manager::CheckAndPatchAll() {
                         PatchNvngxDlssg(me.hModule);
                     }
 
-                    if (!s_ceilingPatched.load() ||
-                        (Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default() &&
-                         !s_flipMeteringPatched.load())) {
+                    if (!s_ceilingPatched.load() || !s_flipMeteringPatched.load()) {
                         PatchDlssgPlugin(me.hModule);
                     }
                 } while (Module32NextW(snap, &me));

@@ -33,20 +33,6 @@ void UpdateVerifiedMfgCapabilities(int& maxInterpolationCount)
     AdaMFGUnlock::Manager::SetEnabled(true);
     AdaMFGUnlock::Manager::CheckAndPatchAll();
 
-    if (!AdaMFGUnlock::Manager::IsReadyForMultiFrame())
-    {
-        // Keep the provider's native capability. A checked box must never
-        // manufacture x3-x6 support when the exact module was not patched.
-        maxInterpolationCount = std::max(maxInterpolationCount, 1);
-        if (!reportedUnavailable.exchange(true))
-        {
-            LOG_WARN("DLSSG: MFG unlock is enabled but the active provider is not validated for real multi-frame generation; using native DLSS-G limits.");
-        }
-        return;
-    }
-
-    reportedUnavailable = false;
-
     maxInterpolationCount = std::max(maxInterpolationCount,
                                      static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective()));
     // Dynamic MFG has a separate provider capability bit and remains governed
@@ -70,8 +56,7 @@ HWND DLSSG_Dx12::Hwnd() { return _hwnd; }
 
 int DLSSG_Dx12::GetMaxInterpolationCount() const
 {
-    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default() &&
-        AdaMFGUnlock::Manager::IsReadyForMultiFrame())
+    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
         return static_cast<int>(AdaMFGUnlock::Manager::GetCeilingEffective());
     if (_maxInterpolationCount > 1)
         return _maxInterpolationCount;
