@@ -3399,20 +3399,21 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             ImGui::Spacing();
         }
 
-        // Only show Ada MFG settings if FG Output is DLSSG, or native DLSSG/Streamline is active
+        // Only show Ada MFG settings if DLSSG is active as FG output or native DLSSG input
         const bool isOtherFgOutput = (config->FGOutput == FGOutput::FSRFG || config->FGOutput == FGOutput::XeFG);
-        const bool isAdaMfgActive = !isOtherFgOutput && (config->FGOutput == FGOutput::DLSSG ||
-                                                        config->FGInput == FGInput::DLSSG ||
-                                                        state.streamlineVersion.major > 0);
+        const bool isDlssgSelected = replaceFgOutputWithNvngx
+            ? (config->FGNvngxReplacement.value_or_default() == FGNvngxReplacement::None)
+            : (config->FGOutput == FGOutput::DLSSG ||
+               (config->FGInput == FGInput::DLSSG && !isOtherFgOutput && config->FGOutput != FGOutput::NoFG));
 
-        if (isAdaMfgActive)
+        if (isDlssgSelected)
         {
             ImGui::Spacing();
-            ImGui::SeparatorText("NVIDIA Multi-Frame Generation (RTX 20 / 30 / 40 / 50)");
+            ImGui::SeparatorText("MFG RTX 20/30/40");
 
             // 1. Top: Unlock MFG Checkbox
             bool unlockAda = config->FGDLSSGUnlockAdaMFG.value_or_default();
-            if (ImGui::Checkbox("Unlock Multi-Frame Generation (RTX 20 / 30 / 40)", &unlockAda))
+            if (ImGui::Checkbox("Unlock MFG", &unlockAda))
             {
                 config->FGDLSSGUnlockAdaMFG = unlockAda;
                 AdaMFGUnlock::Manager::SetEnabled(unlockAda);

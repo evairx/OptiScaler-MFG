@@ -382,11 +382,13 @@ class StreamlineProxy
                 auto result = _slSetD3DDevice(device);
                 if (result == sl::Result::eOk)
                 {
-                    auto reflexConst = sl::ReflexOptions {};
-                    reflexConst.mode = sl::ReflexMode::eOff;
-                    reflexConst.useMarkersToOptimize = false;
-
-                    result = _slReflexSetOptions(reflexConst);
+                    if (_slReflexSetOptions != nullptr)
+                    {
+                        auto reflexConst = sl::ReflexOptions {};
+                        reflexConst.mode = sl::ReflexMode::eOff;
+                        reflexConst.useMarkersToOptimize = false;
+                        result = _slReflexSetOptions(reflexConst);
+                    }
                     _isD3D12Inited = result == sl::Result::eOk;
                 }
             }

@@ -246,6 +246,7 @@ class StreamlineHooks
     static void* hkdlss_slGetPluginFunction(const char* functionName);
 
     // DLSSG
+    inline static bool isOptiScalerSettingDLSSGOptions = false;
     inline static PFN_slGetPluginFunction o_dlssg_slGetPluginFunction = nullptr;
     inline static PFN_slOnPluginLoad o_dlssg_slOnPluginLoad = nullptr;
     inline static PFN_slGetPluginJSONConfig_sl1 o_dlssg_slGetPluginJSONConfig_sl1 = nullptr;

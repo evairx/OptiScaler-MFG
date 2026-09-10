@@ -1193,20 +1193,25 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
 
     sl::FrameToken* localToken = nullptr;
     sl::Result tokenResult = sl::Result::eErrorReflexAPI;
-    if (willPresent && fg != nullptr && !fgFeatureActive)
-        state.dlssgDetectedInterpolationCount = 0;
+    if (willPresent && fg != nullptr)
+    {
+        if (fgFeatureActive && state.activeFgOutput == FGOutput::DLSSG)
+            state.dlssgDetectedInterpolationCount = fg->GetInterpolatedFrameCount();
+        else if (!fgFeatureActive)
+            state.dlssgDetectedInterpolationCount = 0;
+    }
 
     if (willPresent && fgFeatureActive && state.activeFgOutput == FGOutput::DLSSG)
     {
         if ((!ReflexHooks::gameIsSendingMarkers() || !config->FGDLSSGUseGamesReflexMarkers.value_or_default()))
         {
-            if (StreamlineProxy::PCLSetMarker() != nullptr)
+            if (StreamlineProxy::PCLSetMarker() != nullptr && StreamlineProxy::GetNewFrameToken() != nullptr)
             {
                 ((IDXGISwapChain4*) This)->GetCurrentBackBufferIndex();
                 const uint32_t frameId = (uint32_t) fg->FrameCount();
                 tokenResult = StreamlineProxy::GetNewFrameToken()(localToken, &frameId);
 
-                if (tokenResult == sl::Result::eOk)
+                if (tokenResult == sl::Result::eOk && localToken != nullptr)
                     StreamlineProxy::PCLSetMarker()(sl::PCLMarker::ePresentStart, *localToken);
             }
         }
@@ -1289,8 +1294,11 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
         if (StreamlineProxy::PCLSetMarker() != nullptr)
             StreamlineProxy::PCLSetMarker()(sl::PCLMarker::ePresentEnd, *localToken);
 
-        LOG_DEBUG("Calling ReflexSleep");
-        StreamlineProxy::ReflexSleep()(*localToken);
+        if (StreamlineProxy::ReflexSleep() != nullptr)
+        {
+            LOG_DEBUG("Calling ReflexSleep");
+            StreamlineProxy::ReflexSleep()(*localToken);
+        }
     }
 
     if (state.swapchainInteropApi == SwapchainInteropApi::None)

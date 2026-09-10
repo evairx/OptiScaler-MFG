@@ -1111,7 +1111,7 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
     auto& state = State::Instance();
 
     // Disable game's DLSSG when we are trying to create our own instance of DLSSG
-    if (state.activeFgInput != FGInput::DLSSG && state.activeFgOutput == FGOutput::DLSSG)
+    if (!isOptiScalerSettingDLSSGOptions && state.activeFgInput != FGInput::DLSSG && state.activeFgOutput == FGOutput::DLSSG)
     {
         newOptions.mode = sl::DLSSGMode::eOff;
         return o_slDLSSGSetOptions(viewport, newOptions);
@@ -1740,6 +1740,12 @@ void StreamlineHooks::updateForceReflex()
 
 void StreamlineHooks::updateDlssgOptions()
 {
+    if (State::Instance().activeFgOutput == FGOutput::DLSSG && State::Instance().activeFgInput != FGInput::DLSSG)
+    {
+        // When standalone DLSSG_Dx12 is used, options are updated dynamically in DLSSG_Dx12::Dispatch()
+        return;
+    }
+
     if (o_slDLSSGSetOptions)
     {
         LOG_FUNC();
