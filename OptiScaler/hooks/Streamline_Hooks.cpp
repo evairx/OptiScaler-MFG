@@ -1050,14 +1050,6 @@ sl::Result StreamlineHooks::hkslSetConstants(const sl::Constants& values, const 
 
     State::Instance().slFGInputs.setConstants(values, (uint32_t) frame);
 
-    if (s_requestTemporalReset.exchange(false))
-    {
-        sl::Constants resetValues = values;
-        resetValues.reset = sl::Boolean::eTrue;
-        LOG_INFO("AdaMFGUnlock: Injected temporal history reset into Streamline for frame/multiplier transition");
-        return o_slSetConstants(resetValues, frame, viewport);
-    }
-
     return o_slSetConstants(values, frame, viewport);
 }
 
@@ -1114,13 +1106,7 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
     else
         newOptions = options;
 
-    newOptions.structVersion = newStructVer;
-
-    if (Config::Instance()->FGDLSSGQualityGuard.value_or_default() ||
-        Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-    {
-        newOptions.enableUserInterfaceRecomposition = sl::Boolean::eTrue;
-    }
+    newOptions.structVersion = options.structVersion;
 
     auto& state = State::Instance();
 
@@ -1207,25 +1193,21 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
         }
     }
 
-    static uint32_t s_lastInterpolationCount = 1;
-    static sl::DLSSGMode s_lastSetDlssgMode = sl::DLSSGMode::eOff;
-
-    if (newOptions.numFramesToGenerate != s_lastInterpolationCount || newOptions.mode != s_lastSetDlssgMode)
+    // Safety guard matching ReShade:
+    // If requesting >1 generated frames (3X+), verify software pacing (flip metering patched)
+    if (newOptions.numFramesToGenerate > 1 && !AdaMFGUnlock::Manager::IsPacingReady())
     {
-        s_requestTemporalReset.store(true);
-        s_lastInterpolationCount = newOptions.numFramesToGenerate;
-        s_lastSetDlssgMode = newOptions.mode;
+        AdaMFGUnlock::Manager::CheckAndPatchAll();
+        if (!AdaMFGUnlock::Manager::IsPacingReady())
+        {
+            LOG_WARN("StreamlineHooks: Software pacing (flip metering) not ready; clamping numFramesToGenerate to 1 to prevent freeze");
+            newOptions.numFramesToGenerate = 1;
+        }
     }
 
     state.dlssgLastSetMode = newOptions.mode;
 
     sl::Result result = o_slDLSSGSetOptions(viewport, newOptions);
-    if (result != sl::Result::eOk && newOptions.enableUserInterfaceRecomposition == sl::Boolean::eTrue)
-    {
-        LOG_WARN("StreamlineHooks: UI recomposition rejected with sl::Result {:X}, retrying with original UI setting", (uint32_t)result);
-        newOptions.enableUserInterfaceRecomposition = options.structVersion >= 4 ? options.enableUserInterfaceRecomposition : sl::Boolean::eFalse;
-        result = o_slDLSSGSetOptions(viewport, newOptions);
-    }
 
     if (result != sl::Result::eOk && newOptions.numFramesToGenerate > 1)
     {

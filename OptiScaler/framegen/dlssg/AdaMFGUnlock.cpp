@@ -345,7 +345,7 @@ bool Manager::IsCeilingPatched() {
 }
 
 bool Manager::IsPacingReady() {
-    return s_ceilingPatched.load(std::memory_order_relaxed);
+    return s_flipMeteringPatched.load(std::memory_order_relaxed);
 }
 
 uint32_t Manager::GetCeilingEffective() {
@@ -773,12 +773,7 @@ bool Manager::PatchNvngxDlssg(HMODULE dlssgModule) {
 
 bool Manager::PatchDlssgPlugin(HMODULE pluginModule) {
     if (!pluginModule || !s_enabled.load()) return false;
-    bool ceilingOk = PatchFrameCountCeiling(pluginModule);
-    bool flipOk = false;
-    if (Config::Instance()->FGDLSSGForceFlipMeteringOff.value_or_default()) {
-        flipOk = PatchFlipMeteringInModule(pluginModule);
-    }
-    return ceilingOk || flipOk;
+    return PatchFlipMeteringInModule(pluginModule);
 }
 
 void Manager::OnModuleLoaded(HMODULE mod, const wchar_t* path) {
@@ -803,9 +798,8 @@ void Manager::OnModuleLoaded(HMODULE mod, const wchar_t* path) {
             lower.find(L"/models/dlssg/") != std::wstring::npos) {
             PatchNvngxDlssg(mod);
         } else if (lower.find(L"sl.dlss_g") != std::wstring::npos ||
-                   lower.find(L"sl_dlss_g") != std::wstring::npos) {
-            PatchDlssgPlugin(mod);
-        } else if (!s_ceilingPatched.load()) {
+                   lower.find(L"sl_dlss_g") != std::wstring::npos ||
+                   !s_flipMeteringPatched.load()) {
             PatchDlssgPlugin(mod);
         }
     }
@@ -821,13 +815,13 @@ void Manager::CheckAndPatchAll() {
         if (dlssg) PatchNvngxDlssg(dlssg);
     }
 
-    if (!s_ceilingPatched.load()) {
+    if (!s_flipMeteringPatched.load()) {
         HMODULE plugin = GetModuleHandleW(L"sl.dlss_g.dll");
         if (plugin) PatchDlssgPlugin(plugin);
     }
 
     // If any component is still not patched, scan all loaded process modules (handles OTA hashed DLL names)
-    if (!s_ceilingPatched.load() || !s_archPatched.load() || !s_midpointPatched.load()) {
+    if (!s_flipMeteringPatched.load() || !s_archPatched.load() || !s_midpointPatched.load()) {
         HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
         if (snap != INVALID_HANDLE_VALUE) {
             MODULEENTRY32W me = {};
@@ -840,7 +834,7 @@ void Manager::CheckAndPatchAll() {
                         PatchNvngxDlssg(me.hModule);
                     }
 
-                    if (!s_ceilingPatched.load()) {
+                    if (!s_flipMeteringPatched.load()) {
                         PatchDlssgPlugin(me.hModule);
                     }
                 } while (Module32NextW(snap, &me));

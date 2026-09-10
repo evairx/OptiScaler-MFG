@@ -16,14 +16,13 @@ Always check the instructions below for compatibility and configuration details.
   - **Zero-Flicker Midpoint Temporal Reconstruction**:
     - Decompresses Fatbin PTX and rewrites the interpolation kernel to inject dynamic temporal progress parameters (`%f134` and `%f136`) instead of the hardcoded `0.5f` midpoint constant.
     - Eliminates stuttering, duplicate cadence frames, and judder in 3X, 4X, and 6X modes.
-  - **Native UI Recomposition & Clean Resource Flow (Anti-Flicker & Zero Black Lines)**:
-    - Automatically requests Streamline UI Recomposition (`enableUserInterfaceRecomposition = eTrue`) in DLSS-G options, allowing native separation and clean interpolation of `HUDless` and `UI Color & Alpha` layers.
-    - Preserves all game scene buffers intact without destructive tag zeroing, eliminating rapid black lines, black screen flashes, and HUD artifacts in Unreal Engine 5 games like *Black Myth: Wukong* and *Silent Hill 2*.
-  - **Instant Load-Time Interception**:
-    - Hooks into the Windows library loader (`Kernel32` / `KernelBase`) to patch `nvngx_dlssg.dll` and driver OTA models (`\models\dlssg\*.bin`) the very millisecond they are mapped into memory, before NGX can cache device capabilities.
-  - **Pacing Guard & History Synchronization**:
-    - Dynamically injects temporal history resets into Streamline (`slSetConstants` with `reset = eTrue`) upon switching multipliers, ensuring instantaneous and clean transitions.
-    - Integrated with NVIDIA Reflex pacing to keep frame delivery butter-smooth.
+  - **Automatic Software Pacing (RSYNC) & Freeze Prevention**:
+    - Derives and pins DLSS-G's flip metering offset dynamically from `sl.dlss_g.dll`, forcing fallback onto the software RSYNC pacer.
+    - Prevents Blackwell hardware flip metering waits on Ada (RTX 40), eliminating black screens and frozen frames in 3X, 4X, and 6X modes.
+    - Matches the ReShade `MFGAdaUnlock-RenoDx` architecture gate rewrite (`0x190`), with automated pacing checks before passing requests.
+  - **Clean Native Resource & Struct Flow (Anti-Crash & Zero Black Lines)**:
+    - Preserves all game scene buffers and original Streamline struct versions intact without artificial overrides or tag zeroing.
+    - Completely prevents crashes when switching to 2X and eliminates black lines and black screens in Unreal Engine 5 (*Black Myth: Wukong*, *Silent Hill 2*).
 - **Turing & Ampere Hardware Support (RTX 20 & RTX 30 series)**:
   - Bypasses architecture locks in NVIDIA DLSS-G via runtime PTX instruction redirection and dynamic gate patching.
   - Multi-frame generation executes directly on hardware **Tensor Cores** with native performance and minimum latency.
