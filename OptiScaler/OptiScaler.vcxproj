@@ -268,6 +268,8 @@ copy $(SolutionDir)setup_linux.sh $(SolutionDir)x64\Release\a\ /Y
 md $(SolutionDir)x64\Release\a\OptiScaler\D3D12_OptiScaler\
 copy "$(SolutionDir)external\directx_agility_sdk\lib\*.dll" $(SolutionDir)x64\Release\a\OptiScaler\D3D12_OptiScaler\ /Y
 copy "$(SolutionDir)external\directx_agility_sdk\LICENSE.txt" $(SolutionDir)x64\Release\a\Licenses\DirectX_LICENSE.txt /Y
+md $(SolutionDir)x64\Release\a\OptiScaler\dlssg_sm86\
+copy "$(SolutionDir)OptiScaler\dlssg_sm86\*.*" $(SolutionDir)x64\Release\a\OptiScaler\dlssg_sm86\ /Y
 copy NUL "$(SolutionDir)x64\Release\a\!! EXTRACT ALL FILES TO GAME FOLDER !!" /Y</Command>
     </PostBuildEvent>
     <PreBuildEvent>
@@ -443,6 +445,7 @@ copy NUL "$(SolutionDir)x64\Release\a\!! EXTRACT ALL FILES TO GAME FOLDER !!" /Y
     <ClInclude Include="inputs\FG\FSR3_Dx12_FG.h" />
     <ClInclude Include="inputs\FG\Streamline_Inputs_Dx12.h" />
     <ClInclude Include="framegen\xefg\XeFG_Dx12.h" />
+    <ClInclude Include="framegen\dlssg\AmpereMfgLoader.h" />
     <ClInclude Include="hooks\Advapi32_Hooks.h" />
     <ClInclude Include="hooks\Crypt32_Hooks.h" />
     <ClInclude Include="hooks\Gdi32_Hooks.h" />
@@ -602,6 +605,7 @@ copy NUL "$(SolutionDir)x64\Release\a\!! EXTRACT ALL FILES TO GAME FOLDER !!" /Y
     <ClCompile Include="gpu_time\GpuTime_Dx12.cpp" />
     <ClCompile Include="hooks\Amdxc64_Hooks.cpp" />
     <ClCompile Include="framegen\dlssg\MfgUnlock.cpp" />
+    <ClCompile Include="framegen\dlssg\AmpereMfgLoader.cpp" />
     <ClCompile Include="framegen\dlssg\DLSSG_Dx12.cpp" />
     <ClCompile Include="framegen\ffx\FSRFG_Dx12.cpp" />
     <ClCompile Include="framegen\IFGFeature.cpp" />

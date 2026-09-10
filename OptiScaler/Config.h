@@ -598,6 +598,10 @@ class Config
     CustomOptional<bool> FGDLSSGAdaMfgUnlock { true };          // In-memory RTX 40 MFG unlock
     CustomOptional<bool, NoDefault> FGDLSSGAdaBlackwellKernels; // Automatically retarget Blackwell kernels to Ada sm_89
     CustomOptional<bool> FGDLSSGUnlockAdaMFG { true };          // Backward compatibility alias
+    CustomOptional<bool> FGDLSSGAmpereMfgUnlock { false };       // Sideloads SM86/SM75 MFG for RTX 30 / RTX 20
+    CustomOptional<int> FGDLSSGAmpereMfgMaxFrames { 3 };        // 0-3: 0=runtime default (3X), 1=2X, 2=3X, 3=4X
+    CustomOptional<std::string, NoDefault> FGDLSSGAmpereMfgKernelImage;     // Auto / PTX / Cubin
+    CustomOptional<bool> FGDLSSGAmpereMfgHardwareBilinear { false };        // Optional approximate sampling (SM86 only)
     CustomOptional<bool> FGDLSSGQualityGuard { true };          // Quality Guard: filters mismatched HUD separation in 3X/4X to prevent flickering
     CustomOptional<bool> FGDLSSGForceFlipMeteringOff { true };  // Software flip pacing (RSYNC) for Ada multi-frame (prevents presentation freezes and black lines in 3X/4X)
     CustomOptional<int> FGDLSSGInterpolationCount { 1 };        // For Opti's own SL instance

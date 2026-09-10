@@ -155,6 +155,7 @@ class State
     FGInput activeFgInput = FGInput::NoFG;
     FGOutput activeFgOutput = FGOutput::NoFG;
     bool activeUnlockAdaMFG = false;
+    bool activeUnlockAmpereMFG = false;
 
     // Streamline FG inputs
     Sl_Inputs_Dx12 slFGInputs = {};

@@ -1,16 +1,32 @@
-# OptiScaler-MFG v10.0.0-final
+# OptiScaler-MFG v10.0.1 (Pre-release)
 
-Welcome to the official final release of **OptiScaler-MFG (v10.0.0-final)**! 🎉 🚀 🎮
+Welcome to the pre-release of **OptiScaler-MFG (v10.0.1)**! 🚀 🎮
 
-This fork of OptiScaler unlocks native **NVIDIA DLSS Frame Generation (MFG)** on **RTX 20, RTX 30, and RTX 40 series GPUs**, running directly on hardware **Tensor Cores** without requiring ReShade or optical flow shaders.
+This release introduces **Unified Intelligent GPU Architecture Detection** for Multi-Frame Generation across all modern NVIDIA RTX GPUs:
+- **RTX 40 Series (Ada Lovelace)**: Runs on the native in-memory Blackwell retargeting engine (2X to 6X).
+- **RTX 30 Series (Ampere)**: Automatically routes to the optimized SM86 PTX JIT engine (2X to 4X) with zero input delay and exact sampling.
+- **RTX 20 Series (Turing)**: Automatically routes to the optimized SM75 PTX JIT engine (2X to 4X) without visual bugs.
 
-Always check the instructions below for compatibility and configuration details.
+A single, intelligent **"Unlock MFG"** button in the OptiScaler menu identifies your hardware and routes to the optimal path automatically!
 
 ---
 
 ### 🌟 Major Highlights & New Features
 
-#### 🚀 Native DLSS Multi-Frame Generation on Tensor Cores (RTX 20 / RTX 30 / RTX 40)
+#### 🧠 Intelligent Unified Multi-Frame Engine (RTX 20 / RTX 30 / RTX 40)
+- **Automatic Architecture Detection**:
+  - Detects your GPU model and architecture ID automatically on startup.
+  - The menu shows your detected GPU architecture: `Ada (RTX 40)`, `Ampere (RTX 30)`, or `Turing (RTX 20)`.
+  - Toggling **Unlock MFG** automatically engages the correct unlock path without requiring manual configuration or conflicting settings.
+- **Ampere & Turing Native Sideloading (SM86 / SM75)**:
+  - Sideloads `OptiScaler/dlssg_sm86/dlssg_sm86.dll` in a safe background worker outside `DllMain`.
+  - Generates companion `dlssg_sm86.ini` dynamically:
+    - Sets `KernelImage=PTX` for driver JIT compilation to eliminate black screens and broken cubin ABI mismatches.
+    - Sets `HardwareBilinear=0` to ensure exact sampling and eliminate visual ghosting or blur.
+    - Preserves low latency Reflex markers for responsive controls with zero extra input delay.
+- **Ada Lovelace Native In-Memory Retargeting (RTX 40)**:
+  - Preserves the proven zero-allocation Blackwell `sm_120` -> `sm_89` in-place kernel retargeting for ratios up to 6X.
+  - Retains in-memory redirection of older game-bundled DLSS-G to OptiScaler's modern v310.7.129 package.
 - **Definitive Multi-Frame Architecture (2X, 3X, 4X, 5X, 6X)**:
   - Fully incorporates and ports the ReShade `MFGAdaUnlock-RenoDx` engine directly into OptiScaler's native binary (`dxgi.dll`) without needing ReShade, external hooks, or sidecar add-ons.
   - **In-Memory Dynamic Redirection of DLSS-G & Streamline**:
@@ -46,12 +62,13 @@ Always check the instructions below for compatibility and configuration details.
   - Implemented strict Streamline structure version boundary checking to prevent stack overflows and memory corruption in Unreal Engine 5 games (such as *Silent Hill 2*).
   - Clean swapchain handling preventing DXGI access violations during initialization.
 - **Custom Branding**:
-  - OptiScaler in-game UI displays: `evairx/optiscaler-mfg v10.0.0-final - <GameExe>`.
+  - OptiScaler in-game UI displays: `evairx/optiscaler-mfg v10.0.1 - <GameExe>`.
 
 ---
 
 ### 📦 What Comes Bundled:
-- **OptiScaler-MFG v10.0.0-final** (`dxgi.dll` with AdaMFGUnlock & DLSS-G Tensor Core unlockers)
+- **OptiScaler-MFG v10.0.1** (`dxgi.dll` with AdaMFGUnlock & DLSS-G Tensor Core unlockers)
+- **dlssg_sm86 runtime** (`OptiScaler/dlssg_sm86/` with `dlssg_sm86.dll` & optimized PTX JIT profile)
 - **NVIDIA Streamline 2.7.x binaries** (`sl.interposer.dll`, `sl.common.dll`, `sl.dlss_g.dll`, `nvngx_dlssg.dll` v310.7.129.0)
 - **AMD FidelityFX SDK** (FSR 3.1 & FSR 2.2 upscalers and FG)
 - **Intel XeSS SDK** (XeSS and XeFG)

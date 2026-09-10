@@ -1358,6 +1358,9 @@
     <ClCompile Include="framegen\dlssg\MfgUnlock.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="framegen\dlssg\AmpereMfgLoader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="framegen\dlssg\DLSSG_Dx12.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

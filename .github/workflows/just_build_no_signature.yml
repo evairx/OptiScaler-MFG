@@ -8,9 +8,9 @@ name: Build (No Signing)
 on:
   workflow_dispatch:
   push:
-    branches: [ "master", "main" ]
+    branches: [ "master", "main", "feat/mfg-turing-ampere" ]
   pull_request:
-    branches: [ "master", "main" ]
+    branches: [ "master", "main", "feat/mfg-turing-ampere" ]
     
 env:
   # Path to the solution file relative to the root of the project.
@@ -68,7 +68,7 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        $version = "v10.0.0-final"
+        $version = "v10.0.1"
         
         # Get the current date in a specific format (e.g., YYYYMMDD)
         $date = Get-Date -Format "yyyyMMdd"
@@ -121,7 +121,7 @@ jobs:
         name: OptiScaler-MFG ${{ steps.get_version.outputs.version }}
         body_path: RELEASE_NOTES.md
         draft: false
-        prerelease: false
+        prerelease: true
         files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

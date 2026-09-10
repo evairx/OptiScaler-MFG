@@ -39,6 +39,7 @@
 #include <hooks/Advapi32_Hooks.h>
 #include <hooks/Streamline_Hooks.h>
 #include <framegen/dlssg/MfgUnlock.h>
+#include <framegen/dlssg/AmpereMfgLoader.h>
 
 #include <nvapi/NvApiHooks.h>
 
@@ -1751,6 +1752,9 @@ DWORD WINAPI getGpuInfo(LPVOID hModuleVoid)
     if (hModuleVoid)
         IdentifyGpu::updateD3d12Capabilities();
 
+    // Sideload SM86 / SM75 MFG outside DllMain
+    AmpereMfgLoader::TrySetup();
+
     return 0;
 }
 
@@ -1862,9 +1866,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         if (State::Instance().activeFgInput == FGInput::NoFG)
             State::Instance().activeFgOutput = FGOutput::NoFG;
 
-        // Initialize Ada MFG unlock from config
+        // Initialize Ada and Ampere MFG unlock from config
         State::Instance().activeUnlockAdaMFG = Config::Instance()->FGDLSSGAdaMfgUnlock.value_or(
             Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default());
+        State::Instance().activeUnlockAmpereMFG = Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default();
 
         // Init Kernel proxies
         NtdllProxy::Init();
