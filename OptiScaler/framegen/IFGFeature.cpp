@@ -324,6 +324,6 @@ void IFGFeature::SetResourceReady(FG_ResourceType type, int index)
 
 UINT IFGFeature::GetInterpolatedFrameCount() const { return _framesToInterpolate < 0 ? 1 : _framesToInterpolate; }
 
-int IFGFeature::GetMaxInterpolationCount() const { return _maxInterpolationCount; }
+int IFGFeature::GetMaxInterpolationCount() const { return _maxInterpolationCount < 1 ? 1 : _maxInterpolationCount; }
 
 bool IFGFeature::GetDMFGSupport() const { return _supportsDMFG; }

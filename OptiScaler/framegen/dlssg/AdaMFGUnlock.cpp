@@ -750,15 +750,16 @@ void Manager::CheckAndPatchAll() {
             me.dwSize = sizeof(me);
             if (Module32FirstW(snap, &me)) {
                 do {
-                    if (!s_flipMeteringPatched.load()) {
+                    std::wstring name(me.szModule);
+                    for (auto& c : name) c = towlower(c);
+
+                    if (!s_flipMeteringPatched.load() &&
+                        (name.find(L"sl.dlss_g") != std::wstring::npos || name.find(L"dlss_g") != std::wstring::npos)) {
                         PatchDlssgPlugin(me.hModule);
                     }
-                    if (!s_archPatched.load() || !s_midpointPatched.load()) {
-                        std::wstring name(me.szModule);
-                        for (auto& c : name) c = towlower(c);
-                        if (name.find(L"nvngx_dlssg") != std::wstring::npos || name.find(L"dlssg") != std::wstring::npos) {
-                            PatchNvngxDlssg(me.hModule);
-                        }
+                    if ((!s_archPatched.load() || !s_midpointPatched.load()) &&
+                        (name.find(L"nvngx_dlssg") != std::wstring::npos || name.find(L"dlssg") != std::wstring::npos)) {
+                        PatchNvngxDlssg(me.hModule);
                     }
                 } while (Module32NextW(snap, &me));
             }

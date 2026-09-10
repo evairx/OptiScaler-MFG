@@ -1909,6 +1909,9 @@ void MenuCommon::RenderPerformanceOverlay(RenderMenuContext& ctx)
             const int fakeFramesCount = state.dlssgDetectedInterpolationCount;
             auto formatFg = [&](std::string_view name, int maxFakeFrames)
             {
+                if (maxFakeFrames < 1)
+                    maxFakeFrames = 1;
+
                 if (fakeFramesCount > maxFakeFrames)
                     return std::format(" ({} Doesn't support more than {}x)", name, maxFakeFrames);
 
@@ -4231,19 +4234,22 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
             ImGui::BeginDisabled(config->FGDLSSGForceDMFG.value_or_default());
 
             const char* intModes[] = { "2X", "3X", "4X", "5X", "6X" };
-            auto currentSet = fgOutput->GetInterpolatedFrameCount() - 1;
+            int currentSet = (int) fgOutput->GetInterpolatedFrameCount() - 1;
+            if (currentSet < 0 || currentSet >= 5)
+                currentSet = 0;
             auto currentIntCount = intModes[currentSet];
 
             ImGui::PushItemWidth(95.0f * menuResScale);
 
             if (ImGui::BeginCombo("MFG", currentIntCount))
             {
-                for (int i = 0; i < maxInterpolationCount; i++)
+                for (int i = 0; i < maxInterpolationCount && i < 5; i++)
                 {
                     if (ImGui::Selectable(intModes[i], (currentSet == i)))
                     {
                         LOG_DEBUG("DLSSG Interpolation Count set to: {}", i + 1);
                         config->FGDLSSGInterpolationCount = i + 1;
+                        config->FGDLSSGOverrideInterpolationCount = i + 1;
                     }
                 }
 

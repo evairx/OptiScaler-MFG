@@ -30,6 +30,22 @@ feature_version DLSSG_Dx12::Version()
 
 HWND DLSSG_Dx12::Hwnd() { return _hwnd; }
 
+int DLSSG_Dx12::GetMaxInterpolationCount() const
+{
+    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        return 5;
+    if (_maxInterpolationCount > 1)
+        return _maxInterpolationCount;
+    return 1;
+}
+
+bool DLSSG_Dx12::GetDMFGSupport() const
+{
+    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        return true;
+    return _supportsDMFG;
+}
+
 bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQueue, DXGI_SWAP_CHAIN_DESC* desc,
                                  IDXGISwapChain** swapChain, bool readyToRelease)
 {
@@ -122,11 +138,14 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
     if (StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
     {
         _maxInterpolationCount = dlssgState.numFramesToGenerateMax;
-        if (AdaMFGUnlock::Manager::IsEnabled() && Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        if (_maxInterpolationCount < 1)
+            _maxInterpolationCount = 1;
+
+        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
         {
+            AdaMFGUnlock::Manager::SetEnabled(true);
             AdaMFGUnlock::Manager::CheckAndPatchAll();
-            if (_maxInterpolationCount < 5)
-                _maxInterpolationCount = 5;
+            _maxInterpolationCount = 5;
             _supportsDMFG = true;
         }
 
@@ -134,6 +153,17 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
 
         if (!_supportsDMFG)
             _supportsDMFG = dlssgState.bIsDynamicMFGSupported == sl::Boolean::eTrue;
+    }
+    else
+    {
+        _maxInterpolationCount = 1;
+        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        {
+            AdaMFGUnlock::Manager::SetEnabled(true);
+            AdaMFGUnlock::Manager::CheckAndPatchAll();
+            _maxInterpolationCount = 5;
+            _supportsDMFG = true;
+        }
     }
 
     _gameCommandQueue = cmdQueue;
@@ -240,11 +270,14 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
     if (StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
     {
         _maxInterpolationCount = dlssgState.numFramesToGenerateMax;
-        if (AdaMFGUnlock::Manager::IsEnabled() && Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        if (_maxInterpolationCount < 1)
+            _maxInterpolationCount = 1;
+
+        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
         {
+            AdaMFGUnlock::Manager::SetEnabled(true);
             AdaMFGUnlock::Manager::CheckAndPatchAll();
-            if (_maxInterpolationCount < 5)
-                _maxInterpolationCount = 5;
+            _maxInterpolationCount = 5;
             _supportsDMFG = true;
         }
 
@@ -252,6 +285,17 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
 
         if (!_supportsDMFG)
             _supportsDMFG = dlssgState.bIsDynamicMFGSupported == sl::Boolean::eTrue;
+    }
+    else
+    {
+        _maxInterpolationCount = 1;
+        if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+        {
+            AdaMFGUnlock::Manager::SetEnabled(true);
+            AdaMFGUnlock::Manager::CheckAndPatchAll();
+            _maxInterpolationCount = 5;
+            _supportsDMFG = true;
+        }
     }
 
     _gameCommandQueue = cmdQueue;
@@ -363,11 +407,18 @@ bool DLSSG_Dx12::Dispatch()
 
     auto& state = State::Instance();
 
-    if (AdaMFGUnlock::Manager::IsEnabled() && Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+    if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
     {
+        AdaMFGUnlock::Manager::SetEnabled(true);
         AdaMFGUnlock::Manager::CheckAndPatchAll();
         if (_maxInterpolationCount < 5)
             _maxInterpolationCount = 5;
+        _supportsDMFG = true;
+    }
+    else
+    {
+        if (_maxInterpolationCount < 1)
+            _maxInterpolationCount = 1;
     }
 
     int targetCount = 1;
@@ -381,8 +432,9 @@ bool DLSSG_Dx12::Dispatch()
         targetCount = Config::Instance()->FGDLSSGInterpolationCount.value();
     }
 
-    if (targetCount > _maxInterpolationCount)
-        targetCount = _maxInterpolationCount;
+    const int maxCount = GetMaxInterpolationCount();
+    if (targetCount > maxCount)
+        targetCount = maxCount;
     if (targetCount < 1)
         targetCount = 1;
 
