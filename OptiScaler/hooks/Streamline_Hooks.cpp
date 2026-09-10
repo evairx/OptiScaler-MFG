@@ -1746,7 +1746,7 @@ void StreamlineHooks::updateDlssgOptions()
         return;
     }
 
-    if (o_slDLSSGSetOptions)
+    if (o_slDLSSGSetOptions && lastDlssgOptions.structVersion != 0)
     {
         LOG_FUNC();
         hkslDLSSGSetOptions(lastDlssgViewport, lastDlssgOptions);
@@ -2352,3 +2352,24 @@ bool StreamlineHooks::isCommonHooked() { return o_common_slGetPluginFunction != 
 bool StreamlineHooks::isPclHooked() { return o_pcl_slGetPluginFunction != nullptr; }
 
 bool StreamlineHooks::isReflexHooked() { return o_reflex_slGetPluginFunction != nullptr; }
+
+bool StreamlineHooks::isNativeDlssgAvailable()
+{
+    if (isDlssgHooked() || o_slDLSSGSetOptions != nullptr)
+        return true;
+
+    if (State::Instance().streamlineVersion.major > 0)
+        return true;
+
+    if (GetModuleHandleW(L"sl.dlss_g.dll") != nullptr ||
+        GetModuleHandleW(L"sl.interposer.dll") != nullptr ||
+        GetModuleHandleW(L"nvngx_dlssg.dll") != nullptr)
+        return true;
+
+    return false;
+}
+
+bool StreamlineHooks::isNativeDlssgActive()
+{
+    return isNativeDlssgAvailable() && (State::Instance().dlssgLastSetMode != sl::DLSSGMode::eOff);
+}

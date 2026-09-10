@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <mutex>
 #include <sstream>
 #include <tlhelp32.h>
 
@@ -731,6 +732,8 @@ void Manager::OnModuleLoaded(HMODULE mod, const wchar_t* path) {
 
 void Manager::CheckAndPatchAll() {
     if (!s_enabled.load()) return;
+    static std::mutex s_patchMutex;
+    std::lock_guard<std::mutex> lock(s_patchMutex);
 
     if (!s_archPatched.load() || !s_midpointPatched.load()) {
         HMODULE dlssg = GetModuleHandleW(L"nvngx_dlssg.dll");

@@ -3356,10 +3356,17 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 PopulateCombo("FG Output", config->FGOutput, outputOptions);
                 ShowTooltip("The FG that you will actually be using");
 
-                // If user just switched to DLSSG Output, automatically ensure input is not FSRFG
+                // If user just switched to DLSSG Output, automatically ensure input is not FSRFG or NoFG
                 if (config->FGOutput == FGOutput::DLSSG && oldOutput != FGOutput::DLSSG)
                 {
                     if (config->FGInput == FGInput::FSRFG || config->FGInput == FGInput::FSRFG30)
+                    {
+                        if (state.streamlineVersion.major > 0)
+                            config->FGInput = FGInput::DLSSG;
+                        else
+                            config->FGInput = FGInput::Upscaler;
+                    }
+                    else if (config->FGInput == FGInput::NoFG)
                     {
                         if (state.streamlineVersion.major > 0)
                             config->FGInput = FGInput::DLSSG;
@@ -3402,17 +3409,32 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             ImGui::Spacing();
         }
 
-        // Only show Ada MFG settings if DLSSG is active as FG output or native DLSSG input
+        // Show Ada MFG settings if native DLSS-G is present in the game, or DLSSG is active in OptiScaler
         const bool isOtherFgOutput = (config->FGOutput == FGOutput::FSRFG || config->FGOutput == FGOutput::XeFG);
-        const bool isDlssgSelected = replaceFgOutputWithNvngx
-            ? (config->FGNvngxReplacement.value_or_default() == FGNvngxReplacement::None)
-            : (config->FGOutput == FGOutput::DLSSG ||
-               (config->FGInput == FGInput::DLSSG && !isOtherFgOutput && config->FGOutput != FGOutput::NoFG));
+        const bool isNativeDlssgPresent = StreamlineHooks::isNativeDlssgAvailable();
+        const bool isDlssgSelected = !isOtherFgOutput && (
+            isNativeDlssgPresent ||
+            config->FGOutput == FGOutput::DLSSG ||
+            config->FGInput == FGInput::DLSSG ||
+            (replaceFgOutputWithNvngx && config->FGNvngxReplacement.value_or_default() == FGNvngxReplacement::None));
 
         if (isDlssgSelected)
         {
             ImGui::Spacing();
             ImGui::SeparatorText("MFG RTX 20/30/40");
+
+            if (StreamlineHooks::isNativeDlssgActive())
+            {
+                ImGui::TextColored(toneMapColor(ImVec4(0.f, 1.f, 0.25f, 1.f)), "Mode: Native Game DLSS-G (Active)");
+            }
+            else if (isNativeDlssgPresent && config->FGOutput != FGOutput::DLSSG)
+            {
+                ImGui::TextColored(toneMapColor(ImVec4(0.4f, 0.8f, 1.0f, 1.f)), "Mode: Native Game DLSS-G (Standby - Toggle in Game Settings)");
+            }
+            else if (config->FGOutput == FGOutput::DLSSG)
+            {
+                ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.8f, 0.2f, 1.f)), "Mode: OptiScaler DLSS-G (OptiFG)");
+            }
 
             // 1. Top: Unlock MFG Checkbox
             bool unlockAda = config->FGDLSSGUnlockAdaMFG.value_or_default();

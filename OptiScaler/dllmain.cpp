@@ -1870,6 +1870,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         if (State::Instance().activeFgInput == FGInput::NvngxFG)
             State::Instance().activeFgOutput = FGOutput::NoFG;
 
+        // If no FG input is configured, FG output cannot be active (prevents invalid swapchain hook conflicts)
+        if (State::Instance().activeFgInput == FGInput::NoFG)
+            State::Instance().activeFgOutput = FGOutput::NoFG;
+
         // Init Kernel proxies
         NtdllProxy::Init();
         KernelBaseProxy::Init();

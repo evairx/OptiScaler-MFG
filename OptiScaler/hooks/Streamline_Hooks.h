@@ -170,6 +170,8 @@ class StreamlineHooks
     static bool isCommonHooked();
     static bool isPclHooked();
     static bool isReflexHooked();
+    static bool isNativeDlssgAvailable();
+    static bool isNativeDlssgActive();
 
   private:
     inline static sl::RenderAPI renderApi = sl::RenderAPI::eCount;
