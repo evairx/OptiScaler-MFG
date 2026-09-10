@@ -3417,7 +3417,15 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 config->FGDLSSGUnlockAdaMFG = unlockAda;
                 AdaMFGUnlock::Manager::SetEnabled(unlockAda);
                 if (unlockAda)
+                {
                     AdaMFGUnlock::Manager::CheckAndPatchAll();
+                }
+                else
+                {
+                    config->FGDLSSGOverrideInterpolationCount.reset();
+                    config->FGDLSSGInterpolationCount = 1;
+                    StreamlineHooks::updateDlssgOptions();
+                }
             }
             ShowHelpMarker("Unlocks NVIDIA DLSS Multi-Frame Generation (2X, 3X, 4X, 6X) on RTX 40 series using Tensor Cores without ReShade");
 

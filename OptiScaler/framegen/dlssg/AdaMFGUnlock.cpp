@@ -293,7 +293,10 @@ bool Manager::IsEnabled() {
 }
 
 void Manager::SetEnabled(bool enabled) {
-    s_enabled.store(enabled, std::memory_order_relaxed);
+    bool was = s_enabled.exchange(enabled, std::memory_order_relaxed);
+    if (was && !enabled) {
+        RestoreAll();
+    }
 }
 
 bool Manager::IsArchPatched() {
