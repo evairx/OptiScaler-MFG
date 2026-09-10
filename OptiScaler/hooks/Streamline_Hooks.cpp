@@ -1160,7 +1160,8 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
         state.dlssgMfgMax = 5;
     }
 
-    if (dlssgPotentiallyActive && state.streamlineVersion >= feature_version { 2, 7, 1 })
+    if (dlssgPotentiallyActive &&
+        (state.streamlineVersion >= feature_version { 2, 7, 1 } || Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default()))
     {
         // Populate dlssgMfgMax once
         if (!state.dlssgMfgMax.has_value())
@@ -1251,7 +1252,8 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
         optiState.dlssgGameDMFGSupported = true;
     }
 
-    if (optiState.streamlineVersion >= feature_version { 2, 7, 1 })
+    if (optiState.streamlineVersion >= feature_version { 2, 7, 1 } ||
+        Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
     {
         if (!optiState.dlssgMfgMax.has_value())
         {

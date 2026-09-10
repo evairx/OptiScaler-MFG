@@ -3190,7 +3190,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
     outputOptions = {
         { FGOutput::NoFG, "None" },
         { FGOutput::FSRFG, "AMD FSR FG", "FSR3/4-FG, RDNA4 autoupgrades to FSR4-FG\n\nFSR4-FG sometimes better/worse than XeFG" },
-        { FGOutput::DLSSG, "NVIDIA Ada MFG", "Native NVIDIA DLSS Multi-Frame Generation (2X/3X/4X/6X) for RTX 40/50 using Tensor Cores" },
+        { FGOutput::DLSSG, "NVIDIA DLSS MFG", "Native NVIDIA DLSS Multi-Frame Generation (2X/3X/4X/6X) for RTX 30/40/50 using Tensor Cores" },
         { FGOutput::XeFG, "Intel XeFG", "XeFG - heaviest, but best universal FG\n\nXeFG 3 overall deals best with HUD\n\nEnable UI Composition if HUD ghosting" },
     };
 
@@ -3198,7 +3198,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
 
     // DLSSG output requirements
     auto constexpr dlssgOutputIndex = (uint32_t) FGOutput::DLSSG;
-    const bool supportsDlssg = primaryGpu.nvidiaArchInfo.architecture_id >= NV_GPU_ARCHITECTURE_AD100;
+    const bool supportsDlssg = primaryGpu.nvidiaArchInfo.architecture_id >= NV_GPU_ARCHITECTURE_GA100;
     const bool hasDlssgReplacement =
         state.nukemsFgFileAvailable || state.artursFgFileAvailable || FfxApiProxy::IsFGReady(false);
 
@@ -3408,17 +3408,18 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
         if (isAdaMfgActive)
         {
             ImGui::Spacing();
-            ImGui::SeparatorText("NVIDIA Ada MFG (RTX 40 / 50)");
+            ImGui::SeparatorText("NVIDIA Multi-Frame Generation (RTX 30 / 40 / 50)");
 
-            // 1. Top: Unlock Ada MFG Checkbox
+            // 1. Top: Unlock MFG Checkbox
             bool unlockAda = config->FGDLSSGUnlockAdaMFG.value_or_default();
-            if (ImGui::Checkbox("Unlock Ada MFG (RTX 40)", &unlockAda))
+            if (ImGui::Checkbox("Unlock Multi-Frame Generation (RTX 30 / 40)", &unlockAda))
             {
                 config->FGDLSSGUnlockAdaMFG = unlockAda;
                 AdaMFGUnlock::Manager::SetEnabled(unlockAda);
                 if (unlockAda)
                 {
                     AdaMFGUnlock::Manager::CheckAndPatchAll();
+                    StreamlineHooks::updateDlssgOptions();
                 }
                 else
                 {
@@ -3427,17 +3428,24 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                     StreamlineHooks::updateDlssgOptions();
                 }
             }
-            ShowHelpMarker("Unlocks NVIDIA DLSS Multi-Frame Generation (2X, 3X, 4X, 6X) on RTX 40 series using Tensor Cores without ReShade");
+            ShowHelpMarker("Unlocks NVIDIA DLSS Multi-Frame Generation (2X, 3X, 4X, 6X) on RTX 30 and RTX 40 series using Tensor Cores without ReShade");
 
             // 2. Below: Multi-Frame Variants / Multiplier
             ImGui::BeginDisabled(!unlockAda);
 
-            const char* ratioModes[] = { "Default (Game)", "2X (1 extra frame)", "3X (2 extra frames)", "4X (3 extra frames)", "5X (4 extra frames)", "6X (5 extra frames)" };
+            const char* ratioModes[] = {
+                "Default (Game)",
+                "2X (1 extra frame)",
+                "3X (2 extra frames)",
+                "4X (3 extra frames)",
+                "5X (4 extra frames)",
+                "6X (5 extra frames)"
+            };
 
             int currentRatio = 0; // Default
             if (config->FGDLSSGOverrideInterpolationCount.has_value())
             {
-                currentRatio = config->FGDLSSGOverrideInterpolationCount.value() + 1;
+                currentRatio = config->FGDLSSGOverrideInterpolationCount.value();
             }
             else if (config->FGDLSSGInterpolationCount.has_value() && config->FGDLSSGInterpolationCount.value() >= 1)
             {
@@ -3461,10 +3469,10 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                         }
                         else
                         {
-                            int framesToGen = i;
-                            config->FGDLSSGOverrideInterpolationCount = framesToGen - 1;
-                            config->FGDLSSGInterpolationCount = framesToGen;
-                            LOG_DEBUG("DLSSG Interpolation Count set to: {}", framesToGen);
+                            int extraFrames = i; // 1 -> 2X, 2 -> 3X, 3 -> 4X, 4 -> 5X, 5 -> 6X
+                            config->FGDLSSGOverrideInterpolationCount = extraFrames;
+                            config->FGDLSSGInterpolationCount = extraFrames;
+                            LOG_DEBUG("DLSSG Interpolation Count set to: {}", extraFrames);
                         }
                         StreamlineHooks::updateDlssgOptions();
                     }
@@ -3472,13 +3480,13 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 ImGui::EndCombo();
             }
             ImGui::PopItemWidth();
-            ShowHelpMarker("Select multi-frame generation multiplier (3X, 4X, 6X) running natively on Ada Tensor Cores");
+            ShowHelpMarker("Select multi-frame generation multiplier (2X, 3X, 4X, 6X) running natively on Tensor Cores");
 
             ImGui::EndDisabled();
 
             if (!unlockAda)
             {
-                ImGui::TextDisabled("(! ) Unlock Ada MFG must be enabled to use multi-frame variants (3X, 4X, 6X)");
+                ImGui::TextDisabled("(! ) Unlock MFG must be enabled to use multi-frame variants (3X, 4X, 6X)");
             }
 
             if (state.dlssgGameDMFGSupported && config->FGOutput != FGOutput::DLSSG)

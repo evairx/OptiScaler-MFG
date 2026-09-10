@@ -3,6 +3,7 @@
 
 #include <Logger.h>
 #include <Config.h>
+#include <misc/IdentifyGpu.h>
 
 #include <algorithm>
 #include <cstring>
@@ -145,6 +146,33 @@ inline bool BuildTemporalFatbin(const uint8_t* fat, size_t fat_size,
         return false;
     }
 
+    // Determine target GPU architecture: sm_89 for Ada (RTX 40), sm_86 for Ampere (RTX 30), sm_75 for Turing (RTX 20)
+    uint32_t targetArch = kAdaArch; // 89
+    std::string targetPtx = "sm_89";
+
+    auto primaryGpu = IdentifyGpu::getPrimaryGpu();
+    if (primaryGpu.vendorId == VendorId::Nvidia) {
+        if (primaryGpu.nvidiaArchInfo.architecture_id == NV_GPU_ARCHITECTURE_TU100) {
+            targetArch = 75;
+            targetPtx = "sm_75";
+        } else if (primaryGpu.nvidiaArchInfo.architecture_id < NV_GPU_ARCHITECTURE_AD100 &&
+                   primaryGpu.nvidiaArchInfo.architecture_id >= NV_GPU_ARCHITECTURE_GA100) {
+            targetArch = 86;
+            targetPtx = "sm_86";
+        }
+    }
+
+    if (targetArch != kAdaArch) {
+        std::string ptx_str(reinterpret_cast<const char*>(ptx.data()), ptx.size());
+        size_t target_pos = ptx_str.find(".target sm_89");
+        if (target_pos != std::string::npos) {
+            std::string replacement = ".target " + targetPtx;
+            std::memcpy(ptx.data() + target_pos, replacement.data(), replacement.size());
+            LOG_INFO("AdaMFGUnlock: Rewrote PTX target sm_89 -> {} for GPU arch 0x{:X}",
+                     targetPtx, primaryGpu.nvidiaArchInfo.architecture_id);
+        }
+    }
+
     const std::string entry_signature = std::string(".entry ") + profile.entry_name + "(";
     const std::string parameter_name = std::string(profile.entry_name) + "_param_0";
     const std::string parameter_signature =
@@ -235,6 +263,9 @@ inline bool BuildTemporalFatbin(const uint8_t* fat, size_t fat_size,
     out.resize(final_size, 0);
     std::memcpy(out.data() + entry + hdr, patched.data(), patched.size());
 
+    // Update target architecture in fatbin entry header (offset +28)
+    std::memcpy(out.data() + entry + 28, &targetArch, sizeof(targetArch));
+
     const uint64_t payload64 = padded;
     const uint32_t zero32 = 0;
     const uint64_t zero64 = 0;
@@ -293,10 +324,7 @@ bool Manager::IsEnabled() {
 }
 
 void Manager::SetEnabled(bool enabled) {
-    bool was = s_enabled.exchange(enabled, std::memory_order_relaxed);
-    if (was && !enabled) {
-        RestoreAll();
-    }
+    s_enabled.store(enabled, std::memory_order_relaxed);
 }
 
 bool Manager::IsArchPatched() {
@@ -311,6 +339,10 @@ bool Manager::IsFlipMeteringPatched() {
     return s_flipMeteringPatched.load(std::memory_order_relaxed);
 }
 
+bool Manager::IsCeilingPatched() {
+    return s_ceilingPatched.load(std::memory_order_relaxed);
+}
+
 bool Manager::PatchArchGatesInModule(HMODULE mod) {
     if (!mod || s_archPatched.load()) return false;
 
@@ -320,8 +352,13 @@ bool Manager::PatchArchGatesInModule(HMODULE mod) {
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
 
+    auto primaryGpu = IdentifyGpu::getPrimaryGpu();
+    uint8_t kArchNew = 0x70; // Ampere 0x170 by default (passes Ampere 0x170, Ada 0x190, Blackwell 0x1B0)
+    if (primaryGpu.vendorId == VendorId::Nvidia &&
+        primaryGpu.nvidiaArchInfo.architecture_id == NV_GPU_ARCHITECTURE_TU100) {
+        kArchNew = 0x60; // Turing 0x160
+    }
     constexpr uint8_t kArchOld = 0xB0; // Blackwell
-    constexpr uint8_t kArchNew = 0x90; // Ada
 
     std::vector<uint8_t*> found;
     const auto* section = IMAGE_FIRST_SECTION(nt);
@@ -477,6 +514,73 @@ bool Manager::PatchMidpointInModule(HMODULE mod) {
     return true;
 }
 
+bool Manager::WriteFlipSite(uint8_t* at, const uint8_t* bytes, size_t length) {
+    if (length == 0 || length > sizeof(FlipSite::original)) return false;
+    DWORD old_protect = 0;
+    if (VirtualProtect(at, length, PAGE_EXECUTE_READWRITE, &old_protect) == 0) return false;
+    FlipSite site = {};
+    site.address = at;
+    site.length = static_cast<uint8_t>(length);
+    std::memcpy(site.original, at, length);
+    s_flipSites.push_back(site);
+    std::memcpy(at, bytes, length);
+    DWORD ignored = 0;
+    VirtualProtect(at, length, old_protect, &ignored);
+    FlushInstructionCache(GetCurrentProcess(), at, length);
+    return true;
+}
+
+bool Manager::PatchFrameCountCeiling(HMODULE mod) {
+    if (!mod || s_ceilingPatched.load()) return false;
+
+    auto* base = reinterpret_cast<uint8_t*>(mod);
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+
+    const uint8_t tail[] = {0x3B, 0xCA, 0x0F, 0x42, 0xD1};
+    uint8_t* found = nullptr;
+    size_t hits = 0;
+    const auto* section = IMAGE_FIRST_SECTION(nt);
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section) {
+        if ((section->Characteristics & IMAGE_SCN_MEM_EXECUTE) == 0) continue;
+        uint8_t* start = base + section->VirtualAddress;
+        const size_t size = section->Misc.VirtualSize;
+        if (size < 10) continue;
+        for (size_t off = 0; off + 10 <= size; ++off) {
+            if (start[off] != 0xBA) continue;
+            if (start[off + 2] != 0 || start[off + 3] != 0 || start[off + 4] != 0) continue;
+            if (std::memcmp(start + off + 5, tail, sizeof(tail)) != 0) continue;
+            const uint8_t ceiling = start[off + 1];
+            if (ceiling == 0 || ceiling > 8) continue;
+            if (found == nullptr) found = start + off;
+            ++hits;
+        }
+    }
+
+    if (hits != 1 || found == nullptr) return false;
+
+    DWORD old_protect = 0;
+    if (VirtualProtect(found, 10, PAGE_EXECUTE_READWRITE, &old_protect) == 0) return false;
+    s_ceilingSite = found;
+    s_ceilingOriginal = found[1];
+    s_ceilingCmovOriginal = found[9];
+
+    constexpr uint8_t kCeilingTarget = 5; // 5 generated frames = 6X
+    if (found[1] < kCeilingTarget) {
+        found[1] = kCeilingTarget;
+    }
+    found[9] = 0xD2; // cmovb edx, ecx -> cmovb edx, edx
+
+    DWORD ignored = 0;
+    VirtualProtect(found, 10, old_protect, &ignored);
+    FlushInstructionCache(GetCurrentProcess(), found, 10);
+    s_ceilingPatched.store(true);
+    LOG_INFO("AdaMFGUnlock: Uncapped DLSS-G frame count ceiling to 5 (6X) in plugin!");
+    return true;
+}
+
 bool Manager::PatchFlipMeteringInModule(HMODULE mod) {
     if (!mod || s_flipMeteringPatched.load()) return false;
 
@@ -486,7 +590,7 @@ bool Manager::PatchFlipMeteringInModule(HMODULE mod) {
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
 
-    const char kFlipMarker[] = "FlipMetering";
+    constexpr char kFlipMarker[] = "FG1 DLL has been detected";
     const size_t marker_len = sizeof(kFlipMarker) - 1;
     const uint8_t* marker = nullptr;
 
@@ -505,7 +609,6 @@ bool Manager::PatchFlipMeteringInModule(HMODULE mod) {
     }
 
     if (marker == nullptr) {
-        LOG_DEBUG("AdaMFGUnlock: FlipMetering marker not found in module.");
         return false;
     }
 
@@ -542,13 +645,56 @@ bool Manager::PatchFlipMeteringInModule(HMODULE mod) {
         }
     }
 
-    if (want_value >= 0) {
-        s_flipMeteringPatched.store(true);
-        LOG_INFO("AdaMFGUnlock: Successfully configured software flip metering pacing fallback!");
+    if (want_value < 0) {
+        LOG_WARN("AdaMFGUnlock: DLSS-G plugin located but could not read flip-metering fallback state.");
         return true;
     }
 
-    return false;
+    const uint8_t opposite = static_cast<uint8_t>(1 - want_value);
+    section = IMAGE_FIRST_SECTION(nt);
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section) {
+        if ((section->Characteristics & IMAGE_SCN_MEM_EXECUTE) == 0) continue;
+        uint8_t* start = base + section->VirtualAddress;
+        const size_t size = section->Misc.VirtualSize;
+        if (size < 7) continue;
+        for (size_t off = 0; off + 7 <= size; ++off) {
+            if (start[off] == 0xC6) {
+                if (start[off + 1] < 0x80 || start[off + 1] > 0xBF) continue;
+                unsigned int field = 0;
+                std::memcpy(&field, start + off + 2, sizeof(field));
+                if (field != want_offset) continue;
+                if (start[off + 6] != opposite) continue;
+                const uint8_t imm = static_cast<uint8_t>(want_value);
+                WriteFlipSite(start + off + 6, &imm, 1);
+                continue;
+            }
+
+            if (start[off] != 0x40 || start[off + 1] != 0x88) continue;
+            const uint8_t modrm = start[off + 2];
+            if (modrm < 0x80 || modrm > 0xBF) continue;
+            const uint8_t rm = static_cast<uint8_t>(modrm & 7);
+            if (rm == 4) continue;
+            unsigned int field = 0;
+            std::memcpy(&field, start + off + 3, sizeof(field));
+            if (field != want_offset) continue;
+
+            uint8_t replacement[7] = {0xC6, static_cast<uint8_t>(0x80 | rm), 0, 0, 0, 0, static_cast<uint8_t>(want_value)};
+            std::memcpy(replacement + 2, &want_offset, sizeof(want_offset));
+            WriteFlipSite(start + off, replacement, sizeof(replacement));
+        }
+    }
+
+    if (s_flipSites.empty()) {
+        LOG_WARN("AdaMFGUnlock: flip-metering field +0x{:X} found, but nothing writes it in patchable form.", want_offset);
+        return true;
+    }
+
+    s_flipMeteringPatched.store(true);
+    LOG_INFO("AdaMFGUnlock: forced flip-metering off in DLSS-G plugin (pinned field +0x{:X} to {} at {} sites); multi-frame will pace in software (RSYNC).",
+             want_offset, want_value, s_flipSites.size());
+
+    PatchFrameCountCeiling(mod);
+    return true;
 }
 
 bool Manager::PatchNvngxDlssg(HMODULE dlssgModule) {
@@ -578,7 +724,7 @@ void Manager::OnModuleLoaded(HMODULE mod, const wchar_t* path) {
 
     if (lower.find(L"nvngx_dlssg") != std::wstring::npos || lower.find(L"\\models\\dlssg\\") != std::wstring::npos) {
         PatchNvngxDlssg(mod);
-    } else if (lower.find(L"sl.dlss_g") != std::wstring::npos) {
+    } else if (lower.find(L"sl.dlss_g") != std::wstring::npos || lower.find(L"sl_dlss_g_") != std::wstring::npos) {
         PatchDlssgPlugin(mod);
     }
 }
@@ -594,6 +740,30 @@ void Manager::CheckAndPatchAll() {
     if (!s_flipMeteringPatched.load()) {
         HMODULE plugin = GetModuleHandleW(L"sl.dlss_g.dll");
         if (plugin) PatchDlssgPlugin(plugin);
+    }
+
+    // If any component is still not patched, scan all loaded process modules (handles OTA hashed DLL names)
+    if (!s_flipMeteringPatched.load() || !s_archPatched.load() || !s_midpointPatched.load()) {
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
+        if (snap != INVALID_HANDLE_VALUE) {
+            MODULEENTRY32W me = {};
+            me.dwSize = sizeof(me);
+            if (Module32FirstW(snap, &me)) {
+                do {
+                    if (!s_flipMeteringPatched.load()) {
+                        PatchDlssgPlugin(me.hModule);
+                    }
+                    if (!s_archPatched.load() || !s_midpointPatched.load()) {
+                        std::wstring name(me.szModule);
+                        for (auto& c : name) c = towlower(c);
+                        if (name.find(L"nvngx_dlssg") != std::wstring::npos || name.find(L"dlssg") != std::wstring::npos) {
+                            PatchNvngxDlssg(me.hModule);
+                        }
+                    }
+                } while (Module32NextW(snap, &me));
+            }
+            CloseHandle(snap);
+        }
     }
 }
 
@@ -617,12 +787,30 @@ void Manager::RestoreAll() {
         }
     }
     s_midpointPatches.clear();
-    if (s_fatbinAllocation) {
-        VirtualFree(s_fatbinAllocation, 0, MEM_RELEASE);
-        s_fatbinAllocation = nullptr;
-    }
     s_midpointPatched.store(false);
+
+    for (const auto& site : s_flipSites) {
+        DWORD old = 0;
+        if (VirtualProtect(site.address, site.length, PAGE_EXECUTE_READWRITE, &old)) {
+            std::memcpy(site.address, site.original, site.length);
+            VirtualProtect(site.address, site.length, old, &old);
+            FlushInstructionCache(GetCurrentProcess(), site.address, site.length);
+        }
+    }
+    s_flipSites.clear();
     s_flipMeteringPatched.store(false);
+
+    if (s_ceilingPatched.load() && s_ceilingSite != nullptr) {
+        DWORD old = 0;
+        if (VirtualProtect(s_ceilingSite, 10, PAGE_EXECUTE_READWRITE, &old)) {
+            s_ceilingSite[1] = s_ceilingOriginal;
+            s_ceilingSite[9] = s_ceilingCmovOriginal;
+            VirtualProtect(s_ceilingSite, 10, old, &old);
+            FlushInstructionCache(GetCurrentProcess(), s_ceilingSite, 10);
+        }
+        s_ceilingSite = nullptr;
+        s_ceilingPatched.store(false);
+    }
 }
 
 } // namespace AdaMFGUnlock

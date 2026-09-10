@@ -1024,6 +1024,11 @@ void LibraryLoadHooks::CheckModulesInMemory()
                 LOG_DEBUG("sl.dlss_g.dll already in memory");
                 StreamlineHooks::hookDlssg(slDlssg);
             }
+
+            if (Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
+            {
+                AdaMFGUnlock::Manager::PatchDlssgPlugin(slDlssg);
+            }
         }
     }
 
