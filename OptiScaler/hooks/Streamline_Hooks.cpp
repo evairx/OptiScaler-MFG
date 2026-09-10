@@ -12,6 +12,7 @@
 #include <proxies/KernelBase_Proxy.h>
 #include <imgui/ImGuiNotify.hpp>
 #include <framegen/dlssg/MfgUnlock.h>
+#include <framegen/dlssg/AmpereMfgLoader.h>
 
 #include <json.hpp>
 #include <sl1_reflex.h>
