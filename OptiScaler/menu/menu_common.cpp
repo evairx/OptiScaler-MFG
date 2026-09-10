@@ -3353,10 +3353,11 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                     if (ampereStatus.DllLoaded)
                     {
                         std::string router = AmpereMfgLoader::ResolveRouter();
+                        int maxDisplay = std::max(3, config->FGDLSSGAmpereMfgMaxFrames.value_or_default()) + 1;
                         ImGui::TextColored(toneMapColor(ImVec4(0.0f, 1.0f, 0.25f, 1.0f)),
                                            "MFG Active: dlssg_sm86.dll loaded (%s router, PTX JIT, up to %dX).",
                                            router.c_str(),
-                                           config->FGDLSSGAmpereMfgMaxFrames.value_or_default() + 1);
+                                           maxDisplay);
                     }
                     else if (!ampereStatus.ErrorMessage.empty())
                     {
@@ -3432,32 +3433,71 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 }
                 else
                 {
-                    // Multi-Frame Capability for Ampere/Turing (2X to 4X)
+                    // Multi-Frame Ratio for Ampere/Turing (2X to 4X)
                     const char* ampereRatioModes[] = {
+                        "Default (Game)",
                         "2X (1 extra frame)",
                         "3X (2 extra frames)",
                         "4X (3 extra frames)"
                     };
 
-                    int currentAmpereRatio = config->FGDLSSGAmpereMfgMaxFrames.value_or_default() - 1;
-                    if (currentAmpereRatio < 0 || currentAmpereRatio > 2)
-                        currentAmpereRatio = 2; // Default 4X capability
+                    int currentAmpereRatio = 0; // Default
+                    if (config->FGDLSSGOverrideInterpolationCount.has_value())
+                    {
+                        currentAmpereRatio = config->FGDLSSGOverrideInterpolationCount.value();
+                    }
+                    else if (config->FGDLSSGInterpolationCount.has_value() && config->FGDLSSGInterpolationCount.value() >= 1)
+                    {
+                        currentAmpereRatio = config->FGDLSSGInterpolationCount.value();
+                    }
+
+                    if (currentAmpereRatio < 0 || currentAmpereRatio >= 4)
+                        currentAmpereRatio = 0;
 
                     ImGui::PushItemWidth(175.0f * menuResScale);
-                    if (ImGui::BeginCombo("Multi-Frame Capability", ampereRatioModes[currentAmpereRatio]))
+                    if (ImGui::BeginCombo("Multi-Frame Ratio", ampereRatioModes[currentAmpereRatio]))
                     {
-                        for (int i = 0; i <= 2; i++)
+                        for (int i = 0; i <= 3; i++)
                         {
                             if (ImGui::Selectable(ampereRatioModes[i], currentAmpereRatio == i))
                             {
-                                config->FGDLSSGAmpereMfgMaxFrames = i + 1;
-                                state.fgSettingsChanged = true;
+                                if (i == 0)
+                                {
+                                    config->FGDLSSGOverrideInterpolationCount.reset();
+                                    config->FGDLSSGInterpolationCount = 1;
+                                }
+                                else
+                                {
+                                    int extraFrames = i; // 1 -> 2X, 2 -> 3X, 3 -> 4X
+                                    config->FGDLSSGOverrideInterpolationCount = extraFrames;
+                                    config->FGDLSSGInterpolationCount = extraFrames;
+                                    config->FGDLSSGAmpereMfgMaxFrames = std::max(config->FGDLSSGAmpereMfgMaxFrames.value_or_default(), extraFrames);
+                                    AmpereMfgLoader::WriteIniFiles();
+                                    LOG_DEBUG("DLSSG (Ampere) Interpolation Count set to: {}", extraFrames);
+                                }
+                                StreamlineHooks::updateDlssgOptions();
+                                state.fgChanged = true;
                             }
                         }
                         ImGui::EndCombo();
                     }
                     ImGui::PopItemWidth();
-                    ShowHelpMarker("Max frame generation capability advertised for RTX 20/30 (2X up to 4X). Restart game after changing.");
+                    ShowHelpMarker("Select desired frame generation multiplier for RTX 20/30 (2X up to 4X). Overrides game setting in real-time.");
+
+                    bool qGuard = config->FGDLSSGQualityGuard.value_or_default();
+                    if (ImGui::Checkbox("Quality Guard (Anti-Flicker)", &qGuard))
+                    {
+                        config->FGDLSSGQualityGuard = qGuard;
+                    }
+                    ShowHelpMarker("Prevents flickering and ghosting in 3X/4X multi-frame modes by filtering incompatible HUD separation tags");
+
+                    bool hwBilinear = config->FGDLSSGAmpereMfgHardwareBilinear.value_or_default();
+                    if (ImGui::Checkbox("Hardware Bilinear (SM86 Fast Sampling)", &hwBilinear))
+                    {
+                        config->FGDLSSGAmpereMfgHardwareBilinear = hwBilinear;
+                        AmpereMfgLoader::WriteIniFiles();
+                    }
+                    ShowHelpMarker("Enables fast approximate hardware sampling on SM86 (RTX 30) for improved frametimes. Uncheck for exact output.");
                 }
 
                 if (state.dlssgGameDMFGSupported && config->FGOutput != FGOutput::DLSSG)
@@ -4323,6 +4363,7 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
                             config->FGDLSSGInterpolationCount = i + 1;
                             config->FGDLSSGOverrideInterpolationCount = i + 1;
                             config->FGDLSSGAmpereMfgMaxFrames = i + 1;
+                            AmpereMfgLoader::WriteIniFiles();
                             fgOutput->SetInterpolatedFrameCount(i + 1);
                             state.fgChanged = true;
                         }
@@ -4341,6 +4382,17 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
                 config->FGDLSSGQualityGuard = qGuard;
             }
             ShowHelpMarker("Prevents flickering and ghosting in 3X/4X/6X multi-frame modes");
+
+            if (!isAda)
+            {
+                bool hwBilinear = config->FGDLSSGAmpereMfgHardwareBilinear.value_or_default();
+                if (ImGui::Checkbox("Hardware Bilinear (SM86 Fast Sampling)##DLSSG", &hwBilinear))
+                {
+                    config->FGDLSSGAmpereMfgHardwareBilinear = hwBilinear;
+                    AmpereMfgLoader::WriteIniFiles();
+                }
+                ShowHelpMarker("Enables fast approximate hardware sampling on SM86 (RTX 30) for improved frametimes. Uncheck for exact output.");
+            }
         }
 
         if (fgOutput->GetDMFGSupport())

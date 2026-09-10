@@ -20,16 +20,19 @@ Status LastStatus();
 /// Called after DLL initialization, once GPU/environment information is available.
 void TrySetup();
 
-/// Formats dlssg_sm86.ini content with Native 0.2.3 specification and strict clamping.
+/// Writes dlssg_sm86.ini to all target locations (beside DLL, game root, OptiScaler dir).
+void WriteIniFiles();
+
+/// Formats dlssg_sm86.ini content with Native 0.2.4 specification and strict clamping.
 inline std::string FormatIniContent(int maxFrames, const std::string& kernelImg, int hwBilinear = 0, const std::string& router = "SM86", int logLevel = 1)
 {
-    // Native 0.2.3 strictly requires: MaxGeneratedFrames must be 1, 2 or 3
+    // Native 0.2.4 strictly requires: MaxGeneratedFrames must be 1, 2 or 3
     if (maxFrames <= 0 || maxFrames > 3)
         maxFrames = 3;
 
     std::string validKernel = kernelImg;
     if (validKernel != "PTX" && validKernel != "Cubin")
-        validKernel = "Auto";
+        validKernel = "PTX";
 
     std::string validRouter = router;
     if (validRouter != "SM75" && validRouter != "SM86")
@@ -39,7 +42,7 @@ inline std::string FormatIniContent(int maxFrames, const std::string& kernelImg,
     int validLogLevel = (logLevel >= 0 && logLevel <= 3) ? logLevel : 1;
 
     std::ostringstream ss;
-    ss << "; Native 0.2.3. Restart the game after changing this file.\n";
+    ss << "; Native 0.2.4. Restart the game after changing this file.\n";
     ss << "[Compatibility]\n";
     ss << "Router=" << validRouter << "\n";
     ss << "KernelImage=" << validKernel << "\n";
@@ -99,10 +102,7 @@ std::string ResolveAutoKernelImage();
 
 inline std::string ResolveAutoKernelImage(uint32_t archId, const std::string& name, bool onLinux)
 {
-    return onLinux || IsTuringArch(archId) || name.find("RTX 20") != std::string::npos ||
-                   name.find("GTX 16") != std::string::npos || name.find("3080 Ti") != std::string::npos ||
-                   name.find("3080Ti") != std::string::npos || name.find("Laptop") != std::string::npos ||
-                   name.find("Mobile") != std::string::npos
-               ? "PTX" : "Auto";
+    // PTX uses driver JIT compilation and guarantees exact SM matching and stability across all Ampere/Turing models
+    return "PTX";
 }
 } // namespace AmpereMfgLoader

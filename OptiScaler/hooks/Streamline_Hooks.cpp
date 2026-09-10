@@ -960,7 +960,9 @@ static uint32_t GetEffectiveDlssgUnlockedMax()
         return unlockedMax > 0 ? unlockedMax : 5;
     }
 
-    if (Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default())
+    if (Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default() ||
+        State::Instance().activeUnlockAmpereMFG ||
+        AmpereMfgLoader::LastStatus().DllLoaded)
     {
         int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
         if (ampereMax < 1 || ampereMax > 3)

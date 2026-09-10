@@ -20,10 +20,15 @@ A single, intelligent **"Unlock MFG"** button in the OptiScaler menu identifies 
   - Toggling **Unlock MFG** automatically engages the correct unlock path without requiring manual configuration or conflicting settings.
 - **Ampere & Turing Native Sideloading (SM86 / SM75)**:
   - Sideloads `OptiScaler/dlssg_sm86/dlssg_sm86.dll` in a safe background worker outside `DllMain`.
-  - Generates companion `dlssg_sm86.ini` dynamically:
-    - Sets `KernelImage=PTX` for driver JIT compilation to eliminate black screens and broken cubin ABI mismatches.
-    - Sets `HardwareBilinear=0` to ensure exact sampling and eliminate visual ghosting or blur.
-    - Preserves low latency Reflex markers for responsive controls with zero extra input delay.
+  - **Elimination of 2X Lock on RTX 30 / RTX 20**:
+    - Previously, Streamline queries reported `numFramesToGenerateMax = 1`, causing games like *Crimson Desert* to lock to 2X and report MFG as disabled.
+    - OptiScaler now reports `numFramesToGenerateMax = 3` and `DLSSG.MultiFrameCountMax = 3` across Streamline hooks and NGX parameters.
+    - Added **Multi-Frame Ratio** dropdown (`2X`, `3X`, `4X`) directly into the OptiScaler menu for RTX 30 / RTX 20, allowing players to force 3X or 4X in real time without restarting the game.
+  - **Fluidity & Stutter Elimination**:
+    - Companion `dlssg_sm86.ini` is now synchronized and written to the game root, DLL folder, and OptiScaler directory.
+    - Defaults `KernelImage=PTX` to ensure driver JIT compilation matches the physical SM architecture, eliminating shader compile stalls and erratic FPS drops.
+    - Added **Hardware Bilinear (Fast Sampling)** toggle in the menu for RTX 30 (SM86) to minimize GPU frame-generation latency.
+    - Added **Quality Guard (Anti-Flicker)** for Ampere/Turing to prevent HUD separation glitches and flickering in 3X and 4X modes.
 - **Ada Lovelace Native In-Memory Retargeting (RTX 40)**:
   - Preserves the proven zero-allocation Blackwell `sm_120` -> `sm_89` in-place kernel retargeting for ratios up to 6X.
   - Retains in-memory redirection of older game-bundled DLSS-G to OptiScaler's modern v310.7.129 package.
