@@ -1752,6 +1752,35 @@ DWORD WINAPI getGpuInfo(LPVOID hModuleVoid)
     if (hModuleVoid)
         IdentifyGpu::updateD3d12Capabilities();
 
+    // Auto-detect and configure appropriate MFG target for Nvidia hardware
+    if (primaryGpu.vendorId == VendorId::Nvidia)
+    {
+        uint32_t arch = static_cast<uint32_t>(primaryGpu.nvidiaArchInfo.architecture_id);
+        bool isAmpere = AmpereMfgLoader::IsAmpereArch(arch) || (primaryGpu.name.find("RTX 30") != std::string::npos);
+        bool isTuring = AmpereMfgLoader::IsTuringArch(arch) || (primaryGpu.name.find("RTX 20") != std::string::npos || primaryGpu.name.find("GTX 16") != std::string::npos);
+        bool isAda = (arch == 0x190) || ((arch & 0xFFF0) == 0x0190) || (primaryGpu.name.find("RTX 40") != std::string::npos);
+
+        if (isAmpere || isTuring)
+        {
+            if (!Config::Instance()->FGDLSSGAmpereMfgUnlock.has_value())
+            {
+                Config::Instance()->FGDLSSGAmpereMfgUnlock.set_volatile_value(true);
+            }
+            Config::Instance()->FGDLSSGAdaMfgUnlock.set_volatile_value(false);
+            Config::Instance()->FGDLSSGUnlockAdaMFG.set_volatile_value(false);
+            State::Instance().activeUnlockAmpereMFG = Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default();
+            State::Instance().activeUnlockAdaMFG = false;
+        }
+        else if (isAda)
+        {
+            Config::Instance()->FGDLSSGAdaMfgUnlock.set_volatile_value(true);
+            Config::Instance()->FGDLSSGUnlockAdaMFG.set_volatile_value(true);
+            Config::Instance()->FGDLSSGAmpereMfgUnlock.set_volatile_value(false);
+            State::Instance().activeUnlockAdaMFG = true;
+            State::Instance().activeUnlockAmpereMFG = false;
+        }
+    }
+
     // Sideload SM86 / SM75 MFG outside DllMain
     AmpereMfgLoader::TrySetup();
 

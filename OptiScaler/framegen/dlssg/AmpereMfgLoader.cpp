@@ -48,29 +48,67 @@ std::string GenerateIniContent()
 {
     auto* cfg = Config::Instance();
     int maxFrames = cfg->FGDLSSGAmpereMfgMaxFrames.value_or_default();
+    if (cfg->FGDLSSGOverrideInterpolationCount.has_value() &&
+        cfg->FGDLSSGOverrideInterpolationCount.value() > maxFrames)
+    {
+        maxFrames = std::min(3, cfg->FGDLSSGOverrideInterpolationCount.value());
+    }
 
-    std::string kernelImg = cfg->FGDLSSGAmpereMfgKernelImage.value_or("Auto");
+    if (maxFrames <= 0 || maxFrames > 3)
+        maxFrames = 3;
+
+    std::string kernelImg = cfg->FGDLSSGAmpereMfgKernelImage.value_or("PTX");
     if (kernelImg != "PTX" && kernelImg != "Cubin")
-        kernelImg = "Auto";
+        kernelImg = "PTX";
 
     if (kernelImg == "Auto")
     {
         std::string resolved = ResolveAutoKernelImage();
-        if (resolved != "Auto")
-        {
-            LOG_INFO("AmpereMfgLoader: Auto kernel image resolved to {} for GPU: {}",
-                     resolved, IdentifyGpu::getPrimaryGpu().name);
-            kernelImg = resolved;
-        }
+        kernelImg = (resolved != "Auto") ? resolved : "PTX";
     }
 
     int hwBilinear = cfg->FGDLSSGAmpereMfgHardwareBilinear.value_or_default() ? 1 : 0;
     std::string router = ResolveRouter();
     int logLevel = 1;
 
-    LOG_INFO("AmpereMfgLoader: Router selected: {} for GPU: {}", router, IdentifyGpu::getPrimaryGpu().name);
+    LOG_INFO("AmpereMfgLoader: Router selected: {} for GPU: {}, maxFrames: {}, kernel: {}",
+             router, IdentifyGpu::getPrimaryGpu().name, maxFrames, kernelImg);
 
     return FormatIniContent(maxFrames, kernelImg, hwBilinear, router, logLevel);
+}
+
+void WriteIniFiles()
+{
+    auto* cfg = Config::Instance();
+    auto basePath = Util::DllPath().parent_path();
+    std::string content = GenerateIniContent();
+
+    std::vector<std::filesystem::path> targets;
+    auto dllPath = std::filesystem::path(cfg->MainDllPath.value_or(basePath.wstring())) /
+                   L"dlssg_sm86" / L"dlssg_sm86.dll";
+    targets.push_back(dllPath.parent_path() / L"dlssg_sm86.ini");
+    targets.push_back(basePath / L"dlssg_sm86.ini");
+    targets.push_back(basePath / L"OptiScaler" / L"dlssg_sm86.ini");
+    targets.push_back(basePath / L"OptiScaler" / L"dlssg_sm86" / L"dlssg_sm86.ini");
+
+    for (const auto& iniPath : targets)
+    {
+        try
+        {
+            std::filesystem::create_directories(iniPath.parent_path());
+            std::ofstream iniFile(iniPath, std::ios::out | std::ios::trunc);
+            if (iniFile.is_open())
+            {
+                iniFile << content;
+                iniFile.close();
+            }
+        }
+        catch (const std::exception& ex)
+        {
+            LOG_DEBUG("AmpereMfgLoader: Could not write companion INI {}: {}",
+                      wstring_to_string(iniPath.wstring()), ex.what());
+        }
+    }
 }
 
 void TrySetup()
@@ -85,14 +123,6 @@ void TrySetup()
         return;
 
     s_status.Enabled = true;
-
-    // Mutual exclusion: fail if Ada MFG unlock is also enabled
-    if (cfg->FGDLSSGAdaMfgUnlock.value_or_default())
-    {
-        s_status.ErrorMessage = "Cannot enable SM86/SM75 MFG while Ada (RTX 40) MFG unlock is enabled.";
-        LOG_ERROR("AmpereMfgLoader: {}", s_status.ErrorMessage);
-        return;
-    }
 
     // GPU guard: verify Nvidia Turing or Ampere architecture
     const auto& gpu = IdentifyGpu::getPrimaryGpu();
@@ -114,6 +144,15 @@ void TrySetup()
             archId, gpu.name);
         LOG_ERROR("AmpereMfgLoader: {}", s_status.ErrorMessage);
         return;
+    }
+
+    // If Ada MFG unlock was set, disable it cleanly for RTX 30/20 to prevent conflict
+    if (cfg->FGDLSSGAdaMfgUnlock.value_or_default() || cfg->FGDLSSGUnlockAdaMFG.value_or_default())
+    {
+        LOG_INFO("AmpereMfgLoader: Turing/Ampere GPU detected ({}), prioritizing SM86/SM75 MFG unlock", gpu.name);
+        cfg->FGDLSSGAdaMfgUnlock.set_volatile_value(false);
+        cfg->FGDLSSGUnlockAdaMFG.set_volatile_value(false);
+        State::Instance().activeUnlockAdaMFG = false;
     }
 
     // Locate dlssg_sm86.dll
@@ -145,32 +184,9 @@ void TrySetup()
     }
     s_status.DllFound = true;
 
-    // Generate and write companion dlssg_sm86.ini beside the DLL
-    auto iniPath = dllPath.parent_path() / L"dlssg_sm86.ini";
-    try
-    {
-        std::filesystem::create_directories(iniPath.parent_path());
-        std::ofstream iniFile(iniPath, std::ios::out | std::ios::trunc);
-        if (!iniFile.is_open())
-        {
-            s_status.IniWritten = false;
-            s_status.ErrorMessage = "Failed to open dlssg_sm86.ini for writing.";
-            LOG_ERROR("AmpereMfgLoader: Failed to open {} for writing", wstring_to_string(iniPath.wstring()));
-            return;
-        }
-        iniFile << GenerateIniContent();
-        iniFile.close();
-        if (!iniFile)
-            throw std::runtime_error("Could not finish writing dlssg_sm86.ini");
-        s_status.IniWritten = true;
-    }
-    catch (const std::exception& ex)
-    {
-        s_status.IniWritten = false;
-        s_status.ErrorMessage = std::string("Error writing dlssg_sm86.ini: ") + ex.what();
-        LOG_ERROR("AmpereMfgLoader: Exception writing INI: {}", ex.what());
-        return;
-    }
+    // Generate and write companion dlssg_sm86.ini in all locations where dlssg_sm86.dll looks
+    WriteIniFiles();
+    s_status.IniWritten = true;
 
     // Load dlssg_sm86.dll
     NtdllProxy::Init();
