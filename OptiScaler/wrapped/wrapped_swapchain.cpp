@@ -416,7 +416,7 @@ static HRESULT LocalPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
     // Fallback when FGPresent is not hooked for V-sync
     if (willPresent)
     {
-        bool forceVsync = Config::Instance()->ForceVsync.value_or_default(false);
+        bool forceVsync = Config::Instance()->ForceVsync.has_value() && Config::Instance()->ForceVsync.value();
         bool explicitlyForced = Config::Instance()->ForceVsync.has_value();
 
         if (explicitlyForced && forceVsync)

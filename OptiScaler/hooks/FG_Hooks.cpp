@@ -1237,7 +1237,7 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
 
     if (willPresent)
     {
-        bool forceVsync = config->ForceVsync.value_or_default(false);
+        bool forceVsync = config->ForceVsync.has_value() && config->ForceVsync.value();
         bool explicitlyForced = config->ForceVsync.has_value();
 
         if (explicitlyForced && forceVsync)
