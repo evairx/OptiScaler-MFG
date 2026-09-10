@@ -58,6 +58,12 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
 
     std::filesystem::path localSlPath(Config::Instance()->MainDllPath.value());
     localSlPath = localSlPath / L"streamline"; // Hardcoded streamline folder
+    if (!std::filesystem::exists(localSlPath))
+    {
+        auto optiSl = std::filesystem::path(Config::Instance()->MainDllPath.value()) / L"OptiScaler" / L"streamline";
+        if (std::filesystem::exists(optiSl))
+            localSlPath = optiSl;
+    }
     auto normalizedLocalSlPath = localSlPath.lexically_normal();
 
     const bool pathInsideLocalSlPath = Util::IsSubpath(path, normalizedLocalSlPath);
@@ -139,7 +145,32 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
     // Direct nvngx_dlssg.dll load
     if (normalizedPath.contains(L"nvngx_dlssg"))
     {
-        auto dlssgModule = NtdllProxy::LoadLibraryExW_Ldr(lpLibFullPath, NULL, 0);
+        std::wstring targetPath = lpLibFullPath;
+
+        // If OptiScaler has its own modern DLSS-G (v310+), prefer it over game's outdated nvngx_dlssg
+        if (State::Instance().NVNGX_DLSSG_Path.has_value() &&
+            std::filesystem::exists(State::Instance().NVNGX_DLSSG_Path.value()))
+        {
+            targetPath = State::Instance().NVNGX_DLSSG_Path.value();
+            LOG_INFO(L"Redirecting nvngx_dlssg.dll load to OptiScaler DLSS-G: {}", targetPath);
+        }
+        else
+        {
+            auto optiDlssg = std::filesystem::path(Config::Instance()->MainDllPath.value()) / L"OptiScaler" / L"nvngx_dlssg.dll";
+            if (std::filesystem::exists(optiDlssg))
+            {
+                targetPath = optiDlssg.wstring();
+                LOG_INFO(L"Redirecting nvngx_dlssg.dll load to OptiScaler DLSS-G: {}", targetPath);
+            }
+        }
+
+        auto dlssgModule = NtdllProxy::LoadLibraryExW_Ldr(targetPath.c_str(), NULL, 0);
+        if (dlssgModule == nullptr && targetPath != lpLibFullPath)
+        {
+            LOG_WARN(L"Failed loading OptiScaler DLSS-G from {}, falling back to original {}", targetPath, lpLibFullPath);
+            dlssgModule = NtdllProxy::LoadLibraryExW_Ldr(lpLibFullPath, NULL, 0);
+        }
+
         if (dlssgModule != nullptr && MfgUnlock::Pending())
         {
             MfgUnlock::TryApply(dlssgModule);

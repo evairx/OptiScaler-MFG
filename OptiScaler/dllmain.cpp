@@ -1974,6 +1974,18 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         State::Instance().NVNGX_DLSSG_Path = Util::FindFilePath(optiDllPath, "nvngx_dlssg.dll");
         if (!State::Instance().NVNGX_DLSSG_Path.has_value())
             State::Instance().NVNGX_DLSSG_Path = Util::FindFilePath(exePath, "nvngx_dlssg.dll");
+        if (!State::Instance().NVNGX_DLSSG_Path.has_value())
+        {
+            auto optiDlssg = optiDllPath / "OptiScaler" / "nvngx_dlssg.dll";
+            if (std::filesystem::exists(optiDlssg))
+                State::Instance().NVNGX_DLSSG_Path = optiDlssg.wstring();
+            else
+            {
+                auto optiSlDlssg = optiDllPath / "OptiScaler" / "streamline" / "nvngx_dlssg.dll";
+                if (std::filesystem::exists(optiSlDlssg))
+                    State::Instance().NVNGX_DLSSG_Path = optiSlDlssg.wstring();
+            }
+        }
 
         // Not 100% accurate for Nvidia cards without DLSS
         if (Config::Instance()->DLSSEnabled.value_or_default() && possibleNvidia)

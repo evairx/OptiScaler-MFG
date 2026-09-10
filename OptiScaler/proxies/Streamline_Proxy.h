@@ -75,6 +75,12 @@ class StreamlineProxy
 
         std::filesystem::path localSlPath(Config::Instance()->MainDllPath.value());
         localSlPath = localSlPath / L"streamline"; // Hardcoded streamline folder
+        if (!std::filesystem::exists(localSlPath))
+        {
+            auto optiSl = std::filesystem::path(Config::Instance()->MainDllPath.value()) / L"OptiScaler" / L"streamline";
+            if (std::filesystem::exists(optiSl))
+                localSlPath = optiSl;
+        }
 
         std::filesystem::path slInterposerPath = localSlPath / L"sl.interposer.dll";
         LOG_INFO(L"Trying to load sl.interposer.dll from dll path: {}", slInterposerPath.wstring());
@@ -87,7 +93,23 @@ class StreamlineProxy
             State::Instance().optiSlInterposer = _dll;
             auto slCommonPath = localSlPath / L"sl.common.dll";
             State::Instance().optiSlCommon = NtdllProxy::LoadLibraryExW_Ldr(slCommonPath.c_str(), NULL, NULL);
-            auto dlssgPath = localSlPath / L"nvngx_dlssg.dll"; // TODO: maybe some search?
+
+            std::filesystem::path dlssgPath = localSlPath / L"nvngx_dlssg.dll";
+            if (!std::filesystem::exists(dlssgPath))
+            {
+                if (State::Instance().NVNGX_DLSSG_Path.has_value() &&
+                    std::filesystem::exists(State::Instance().NVNGX_DLSSG_Path.value()))
+                {
+                    dlssgPath = State::Instance().NVNGX_DLSSG_Path.value();
+                }
+                else
+                {
+                    auto optiDlssg = std::filesystem::path(Config::Instance()->MainDllPath.value()) / L"OptiScaler" / L"nvngx_dlssg.dll";
+                    if (std::filesystem::exists(optiDlssg))
+                        dlssgPath = optiDlssg;
+                }
+            }
+
             State::Instance().optiDLSSG = NtdllProxy::LoadLibraryExW_Ldr(dlssgPath.c_str(), NULL, NULL);
 
             if (State::Instance().optiDLSSG != nullptr)
