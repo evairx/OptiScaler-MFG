@@ -1,6 +1,6 @@
-# OptiScaler-MFG v10.0.0-evairx
+# OptiScaler-MFG v10.0.0-final
 
-Welcome to the initial release of **OptiScaler-MFG (v10.0.0-evairx)**! 🎉 🎉 🎉
+Welcome to the official final release of **OptiScaler-MFG (v10.0.0-final)**! 🎉 🚀 🎮
 
 This fork of OptiScaler unlocks native **NVIDIA DLSS Frame Generation (MFG)** on **RTX 20, RTX 30, and RTX 40 series GPUs**, running directly on hardware **Tensor Cores** without requiring ReShade or optical flow shaders.
 
@@ -13,6 +13,12 @@ Always check the instructions below for compatibility and configuration details.
 #### 🚀 Native DLSS Multi-Frame Generation on Tensor Cores (RTX 20 / RTX 30 / RTX 40)
 - **Definitive Multi-Frame Architecture (2X, 3X, 4X, 5X, 6X)**:
   - Fully incorporates and ports the ReShade `MFGAdaUnlock-RenoDx` engine directly into OptiScaler's native binary (`dxgi.dll`) without needing ReShade, external hooks, or sidecar add-ons.
+  - **In-Memory Dynamic Redirection of DLSS-G & Streamline**:
+    - When a game attempts to load an older bundled DLSS-G (such as v3.7.0 in *Silent Hill 2*), OptiScaler intercepts the `LoadLibrary` call in memory and automatically redirects it to OptiScaler's modern `nvngx_dlssg.dll` v310.7.129.0 package.
+    - Completely eliminates the `partial match (Adv:0 Val:0 Kernels:0)` error and unlocks all 31 midpoint interpolation containers.
+  - **In-Place Dynamic Kernel Retargeting (`sm_120` -> `sm_89`)**:
+    - Rewrites Blackwell interpolation kernels to Ada Lovelace architecture directly in memory upon DLL loading.
+    - Completely eliminates crashes when switching between 2X, 3X, 4X, and 6X modes.
   - **Zero-Flicker Midpoint Temporal Reconstruction**:
     - Decompresses Fatbin PTX and rewrites the interpolation kernel to inject dynamic temporal progress parameters (`%f134` and `%f136`) instead of the hardcoded `0.5f` midpoint constant.
     - Eliminates stuttering, duplicate cadence frames, and judder in 3X, 4X, and 6X modes.
@@ -22,7 +28,7 @@ Always check the instructions below for compatibility and configuration details.
     - Matches the ReShade `MFGAdaUnlock-RenoDx` architecture gate rewrite (`0x190`), with automated pacing checks before passing requests.
   - **Clean Native Resource & Struct Flow (Anti-Crash & Zero Black Lines)**:
     - Preserves all game scene buffers and original Streamline struct versions intact without artificial overrides or tag zeroing.
-    - Completely prevents crashes when switching to 2X and eliminates black lines and black screens in Unreal Engine 5 (*Black Myth: Wukong*, *Silent Hill 2*).
+    - Completely prevents crashes and eliminates black lines and black screens in Unreal Engine 5 (*Black Myth: Wukong*, *Silent Hill 2*).
 - **Turing & Ampere Hardware Support (RTX 20 & RTX 30 series)**:
   - Bypasses architecture locks in NVIDIA DLSS-G via runtime PTX instruction redirection and dynamic gate patching.
   - Multi-frame generation executes directly on hardware **Tensor Cores** with native performance and minimum latency.
@@ -40,13 +46,13 @@ Always check the instructions below for compatibility and configuration details.
   - Implemented strict Streamline structure version boundary checking to prevent stack overflows and memory corruption in Unreal Engine 5 games (such as *Silent Hill 2*).
   - Clean swapchain handling preventing DXGI access violations during initialization.
 - **Custom Branding**:
-  - OptiScaler in-game UI displays: `evairx/optiscaler-mfg v10.0.0 - <GameExe>`.
+  - OptiScaler in-game UI displays: `evairx/optiscaler-mfg v10.0.0-final - <GameExe>`.
 
 ---
 
 ### 📦 What Comes Bundled:
-- **OptiScaler-MFG v10.0.0-evairx** (with AdaMFGUnlock & DLSS-G Tensor Core unlockers)
-- **NVIDIA Streamline 2.4.x / 2.7.x binaries** (`sl.interposer.dll`, `sl.common.dll`, `sl.dlss_g.dll`, `nvngx_dlssg.dll`, etc.)
+- **OptiScaler-MFG v10.0.0-final** (`dxgi.dll` with AdaMFGUnlock & DLSS-G Tensor Core unlockers)
+- **NVIDIA Streamline 2.7.x binaries** (`sl.interposer.dll`, `sl.common.dll`, `sl.dlss_g.dll`, `nvngx_dlssg.dll` v310.7.129.0)
 - **AMD FidelityFX SDK** (FSR 3.1 & FSR 2.2 upscalers and FG)
 - **Intel XeSS SDK** (XeSS and XeFG)
 - Automated installation script (`setup_windows.bat`)
