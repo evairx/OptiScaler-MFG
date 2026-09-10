@@ -3190,7 +3190,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
     outputOptions = {
         { FGOutput::NoFG, "None" },
         { FGOutput::FSRFG, "AMD FSR FG", "FSR3/4-FG, RDNA4 autoupgrades to FSR4-FG\n\nFSR4-FG sometimes better/worse than XeFG" },
-        { FGOutput::DLSSG, "NVIDIA DLSS MFG", "Native NVIDIA DLSS Multi-Frame Generation (2X/3X/4X/6X) for RTX 30/40/50 using Tensor Cores" },
+        { FGOutput::DLSSG, "NVIDIA DLSS MFG", "Native NVIDIA DLSS Multi-Frame Generation (2X/3X/4X/6X) for RTX 20/30/40/50 using Tensor Cores" },
         { FGOutput::XeFG, "Intel XeFG", "XeFG - heaviest, but best universal FG\n\nXeFG 3 overall deals best with HUD\n\nEnable UI Composition if HUD ghosting" },
     };
 
@@ -3198,7 +3198,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
 
     // DLSSG output requirements
     auto constexpr dlssgOutputIndex = (uint32_t) FGOutput::DLSSG;
-    const bool supportsDlssg = primaryGpu.nvidiaArchInfo.architecture_id >= NV_GPU_ARCHITECTURE_GA100;
+    const bool supportsDlssg = primaryGpu.nvidiaArchInfo.architecture_id >= NV_GPU_ARCHITECTURE_TU100;
     const bool hasDlssgReplacement =
         state.nukemsFgFileAvailable || state.artursFgFileAvailable || FfxApiProxy::IsFGReady(false);
 
@@ -3408,11 +3408,11 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
         if (isAdaMfgActive)
         {
             ImGui::Spacing();
-            ImGui::SeparatorText("NVIDIA Multi-Frame Generation (RTX 30 / 40 / 50)");
+            ImGui::SeparatorText("NVIDIA Multi-Frame Generation (RTX 20 / 30 / 40 / 50)");
 
             // 1. Top: Unlock MFG Checkbox
             bool unlockAda = config->FGDLSSGUnlockAdaMFG.value_or_default();
-            if (ImGui::Checkbox("Unlock Multi-Frame Generation (RTX 30 / 40)", &unlockAda))
+            if (ImGui::Checkbox("Unlock Multi-Frame Generation (RTX 20 / 30 / 40)", &unlockAda))
             {
                 config->FGDLSSGUnlockAdaMFG = unlockAda;
                 AdaMFGUnlock::Manager::SetEnabled(unlockAda);
@@ -3428,7 +3428,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                     StreamlineHooks::updateDlssgOptions();
                 }
             }
-            ShowHelpMarker("Unlocks NVIDIA DLSS Multi-Frame Generation (2X, 3X, 4X, 6X) on RTX 30 and RTX 40 series using Tensor Cores without ReShade");
+            ShowHelpMarker("Unlocks NVIDIA DLSS Multi-Frame Generation (2X, 3X, 4X, 6X) on RTX 20, RTX 30 and RTX 40 series using Tensor Cores without ReShade");
 
             // 2. Below: Multi-Frame Variants / Multiplier
             ImGui::BeginDisabled(!unlockAda);
