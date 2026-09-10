@@ -49,18 +49,14 @@ A single, intelligent **"Unlock MFG"** button in the OptiScaler menu identifies 
   - Bypasses architecture locks in NVIDIA DLSS-G via runtime PTX instruction redirection and dynamic gate patching.
   - Multi-frame generation executes directly on hardware **Tensor Cores** with native performance and minimum latency.
 
-#### 🛠️ Seamless In-Game Menu & Flow
-- **Direct "Unlock MFG" Toggle**:
-  - `Unlock MFG` is always available and clickable in the menu under the *MFG RTX 20/30/40* section.
-  - Clean restart workflow:
-    - When enabled during gameplay, a clear reminder is displayed:
-      `Save Settings and restart the game for MFG to take effect.`
-    - Once the game is restarted with `Unlock MFG` enabled, the status confirms:
-      `MFG is active and running on Tensor Cores.`
-    - The **Multi-Frame Ratio** selector is unlocked, allowing you to choose between **Default (Game), 2X, 3X, 4X, 5X, and 6X**.
-- **Memory & Crash Protections**:
-  - Implemented strict Streamline structure version boundary checking to prevent stack overflows and memory corruption in Unreal Engine 5 games (such as *Silent Hill 2*).
-  - Clean swapchain handling preventing DXGI access violations during initialization.
+#### 🛠️ Seamless In-Game Menu & OptiFG Unification
+- **OptiFG Multi-Frame Generation (2X, 3X, 4X, 5X, 6X)**:
+  - Games without native Frame Generation can now force Multi-Frame Generation at up to 6X on RTX 40 (and up to 4X on RTX 30/20) using full OptiScaler OptiFG!
+  - Synchronizes `DLSSG.MultiFrameCountMax`, `DLSSG_Dx12::GetMaxInterpolationCount()`, and `SetInterpolatedFrameCount()` across Streamline so intermediate frames are properly generated and pacing is respected.
+- **Unified Menu Flow (No More Duplicate DLSS-G Sections)**:
+  - Eliminated confusing redundant sections in the menu.
+  - When playing games with **Native DLSS-G** (Cyberpunk, Wukong, Silent Hill 2), only the Native Game DLSS-G section is shown.
+  - When playing games with **OptiFG** (`FG Output = DLSSG`), all controls (`Active`, `Unlock MFG`, and `Multi-Frame Ratio`) are consolidated into a single unified control block that applies dynamically in real time.
 - **Custom Branding**:
   - OptiScaler in-game UI displays: `evairx/optiscaler-mfg v10.0.1 - <GameExe>`.
 

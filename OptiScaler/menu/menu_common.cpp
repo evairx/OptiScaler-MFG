@@ -3246,17 +3246,15 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             ImGui::Spacing();
         }
 
-        // Show MFG settings if native DLSS-G is present in the game, or DLSSG is active in OptiScaler
+        // Show MFG settings ONLY if native DLSS-G is present in the game, and OptiFG DLSS-G is NOT selected
         const bool isOtherFgOutput = (config->FGOutput == FGOutput::FSRFG || config->FGOutput == FGOutput::XeFG);
         const bool isNativeDlssgPresent = StreamlineHooks::isNativeDlssgAvailable();
-        const bool isDlssgSelected = !isOtherFgOutput &&
-                                     (isNativeDlssgPresent || config->FGOutput == FGOutput::DLSSG ||
-                                      config->FGInput == FGInput::DLSSG);
+        const bool isNativeDlssgMode = isNativeDlssgPresent && (config->FGOutput != FGOutput::DLSSG);
 
-        if (isDlssgSelected)
+        if (isNativeDlssgMode)
         {
             ImGui::Spacing();
-            ImGui::SeparatorText("NVIDIA DLSS Multi-Frame Generation (RTX 20 / 30 / 40)");
+            ImGui::SeparatorText("NVIDIA DLSS Multi-Frame Generation (Native Game DLSS-G)");
 
             if (isAda)
             {
@@ -3279,20 +3277,15 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                                    "Architecture: NVIDIA GPU (%s)", primaryGpu.name.c_str());
             }
 
-            const bool isNativeDlssgMode = isNativeDlssgPresent && (config->FGOutput != FGOutput::DLSSG);
             const bool isNativeDlssgActive = StreamlineHooks::isNativeDlssgActive();
 
             if (isNativeDlssgActive)
             {
                 ImGui::TextColored(toneMapColor(ImVec4(0.f, 1.f, 0.25f, 1.f)), "Mode: Native Game DLSS-G (Active)");
             }
-            else if (isNativeDlssgMode)
+            else
             {
                 ImGui::TextColored(toneMapColor(ImVec4(0.4f, 0.8f, 1.0f, 1.f)), "Mode: Native Game DLSS-G (Standby - Toggle in Game Settings)");
-            }
-            else if (config->FGOutput == FGOutput::DLSSG)
-            {
-                ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.8f, 0.2f, 1.f)), "Mode: OptiScaler DLSS-G (OptiFG)");
             }
 
             bool unlockMfg = isAda ? mfgAdaVal : mfgAmpereVal;
@@ -4168,11 +4161,11 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
         }
     }
 
-    // DLSSG controls
+    // DLSSG controls (OptiFG)
     if (state.activeFgOutput == FGOutput::DLSSG && state.activeFgInput != FGInput::NoFG &&
         state.currentFGSwapchain != nullptr && StreamlineProxy::LoadStreamline() && fgOutput)
     {
-        ImGui::SeparatorText("Frame Generation (DLSSG)");
+        ImGui::SeparatorText("Frame Generation (NVIDIA DLSS-G / OptiFG)");
 
         if (state.hdrOutputActive && outputIsHdr)
         {
@@ -4183,11 +4176,42 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
             }
         }
 
+        const auto& primaryGpu = IdentifyGpu::getPrimaryGpu();
+        const uint32_t archId = static_cast<uint32_t>(primaryGpu.nvidiaArchInfo.architecture_id);
+        const bool isAda = (archId >= 0x00000190) || (primaryGpu.name.find("RTX 40") != std::string::npos);
+        const bool isAmpere = AmpereMfgLoader::IsAmpereArch(archId) || (primaryGpu.name.find("RTX 30") != std::string::npos);
+        const bool isTuring = AmpereMfgLoader::IsTuringArch(archId) || (primaryGpu.name.find("RTX 20") != std::string::npos || primaryGpu.name.find("GTX 16") != std::string::npos);
+
+        if (isAda)
+        {
+            ImGui::TextColored(toneMapColor(ImVec4(0.4f, 0.8f, 1.0f, 1.f)),
+                               "Architecture: Ada Lovelace (RTX 40) - Native Ada Engine");
+        }
+        else if (isAmpere)
+        {
+            ImGui::TextColored(toneMapColor(ImVec4(0.4f, 0.8f, 1.0f, 1.f)),
+                               "Architecture: Ampere (RTX 30) - SM86 MFG Engine");
+        }
+        else if (isTuring)
+        {
+            ImGui::TextColored(toneMapColor(ImVec4(0.4f, 0.8f, 1.0f, 1.f)),
+                               "Architecture: Turing (RTX 20) - SM75 MFG Engine");
+        }
+        else
+        {
+            ImGui::TextColored(toneMapColor(ImVec4(0.4f, 0.8f, 1.0f, 1.f)),
+                               "Architecture: NVIDIA GPU (%s)", primaryGpu.name.c_str());
+        }
+
         ImGui::Text("Current DLSSG state:");
         ImGui::SameLine();
         if (auto count = state.dlssgDetectedInterpolationCount; count > 0)
         {
-            ImGui::TextColored(toneMapColor(ImVec4(0.f, 1.f, 0.25f, 1.f)), std::format("ON {}x", count + 1).c_str());
+            ImGui::TextColored(toneMapColor(ImVec4(0.f, 1.f, 0.25f, 1.f)), std::format("ON {}x (Active)", count + 1).c_str());
+        }
+        else if (config->FGEnabled.value_or_default())
+        {
+            ImGui::TextColored(toneMapColor(ImVec4(0.2f, 0.8f, 1.0f, 1.f)), "STANDBY (Rendering frames...)");
         }
         else
         {
@@ -4195,85 +4219,158 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
         }
 
         bool fgActive = config->FGEnabled.value_or_default();
-        if (ImGui::Checkbox("Active##4", &fgActive))
+        if (ImGui::Checkbox("Active##DLSSG", &fgActive))
         {
             config->FGEnabled = fgActive;
-            LOG_DEBUG("Enabled set FGEnabled: {}", fgActive);
+            LOG_DEBUG("OptiFG DLSSG set FGEnabled: {}", fgActive);
 
             if (config->FGEnabled.value_or_default())
                 state.fgChanged = true;
         }
+        ShowHelpMarker("Enable or disable OptiFG Frame Generation immediately");
 
-        ShowHelpMarker("Enable Frame Generation");
+        ImGui::SameLine(0.0f, 16.0f);
+
+        const bool mfgAdaVal = config->FGDLSSGAdaMfgUnlock.value_or(config->FGDLSSGUnlockAdaMFG.value_or_default());
+        const bool mfgAmpereVal = config->FGDLSSGAmpereMfgUnlock.value_or_default();
+        bool unlockMfg = isAda ? mfgAdaVal : mfgAmpereVal;
+        if (ImGui::Checkbox("Unlock MFG##DLSSG", &unlockMfg))
+        {
+            if (isAda)
+            {
+                config->FGDLSSGAdaMfgUnlock = unlockMfg;
+                config->FGDLSSGUnlockAdaMFG = unlockMfg;
+                config->FGDLSSGAmpereMfgUnlock = false;
+            }
+            else
+            {
+                config->FGDLSSGAmpereMfgUnlock = unlockMfg;
+                config->FGDLSSGAdaMfgUnlock = false;
+                config->FGDLSSGUnlockAdaMFG = false;
+            }
+            state.fgSettingsChanged = true;
+        }
+        ShowHelpMarker("Intelligent MFG unlock: enables Multi-Frame Generation (up to 6X on RTX 40, up to 4X on RTX 30/20)");
+
+        const bool activeMfgVal = isAda ? state.activeUnlockAdaMFG : state.activeUnlockAmpereMFG;
+        if (activeMfgVal != unlockMfg)
+        {
+            ImGui::Spacing();
+            ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.2f, 0.2f, 1.0f)),
+                               "Save Settings and restart the game for MFG unlock to take full effect.");
+        }
 
         auto maxInterpolationCount = fgOutput->GetMaxInterpolationCount();
+        if (unlockMfg && maxInterpolationCount < (isAda ? 5 : 3))
+            maxInterpolationCount = isAda ? 5 : 3;
 
-        if (maxInterpolationCount > 1)
+        if (unlockMfg || maxInterpolationCount > 1)
         {
             ImGui::SameLine(0.0f, 16.0f);
-
             ImGui::BeginDisabled(config->FGDLSSGForceDMFG.value_or_default());
 
-            const char* intModes[] = { "2X", "3X", "4X", "5X", "6X" };
-            int currentSet = (int) fgOutput->GetInterpolatedFrameCount() - 1;
-            if (currentSet < 0 || currentSet >= 5)
-                currentSet = 0;
-            auto currentIntCount = intModes[currentSet];
-
-            ImGui::PushItemWidth(95.0f * menuResScale);
-
-            if (ImGui::BeginCombo("MFG", currentIntCount))
+            if (isAda)
             {
-                for (int i = 0; i < maxInterpolationCount && i < 5; i++)
+                const char* intModes[] = { "2X", "3X", "4X", "5X", "6X" };
+                int currentSet = (int) fgOutput->GetInterpolatedFrameCount() - 1;
+                if (config->FGDLSSGOverrideInterpolationCount.has_value())
+                    currentSet = config->FGDLSSGOverrideInterpolationCount.value() - 1;
+                else if (config->FGDLSSGInterpolationCount.has_value())
+                    currentSet = config->FGDLSSGInterpolationCount.value() - 1;
+
+                if (currentSet < 0 || currentSet >= 5)
+                    currentSet = 0;
+
+                ImGui::PushItemWidth(100.0f * menuResScale);
+                if (ImGui::BeginCombo("MFG Ratio##DLSSG", intModes[currentSet]))
                 {
-                    if (ImGui::Selectable(intModes[i], (currentSet == i)))
+                    for (int i = 0; i < maxInterpolationCount && i < 5; i++)
                     {
-                        LOG_DEBUG("DLSSG Interpolation Count set to: {}", i + 1);
-                        config->FGDLSSGInterpolationCount = i + 1;
-                        config->FGDLSSGOverrideInterpolationCount = i + 1;
+                        if (ImGui::Selectable(intModes[i], (currentSet == i)))
+                        {
+                            LOG_DEBUG("DLSSG Interpolation Count set to: {}", i + 1);
+                            config->FGDLSSGInterpolationCount = i + 1;
+                            config->FGDLSSGOverrideInterpolationCount = i + 1;
+                            fgOutput->SetInterpolatedFrameCount(i + 1);
+                            state.fgChanged = true;
+                        }
                     }
+                    ImGui::EndCombo();
                 }
-
-                ImGui::EndCombo();
+                ImGui::PopItemWidth();
+                ShowHelpMarker("Select desired multi-frame multiplier (2X up to 6X). Forced in OptiFG.");
             }
+            else
+            {
+                const char* intModes[] = { "2X", "3X", "4X" };
+                int currentSet = (int) fgOutput->GetInterpolatedFrameCount() - 1;
+                if (config->FGDLSSGOverrideInterpolationCount.has_value())
+                    currentSet = config->FGDLSSGOverrideInterpolationCount.value() - 1;
+                else if (config->FGDLSSGInterpolationCount.has_value())
+                    currentSet = config->FGDLSSGInterpolationCount.value() - 1;
 
-            ImGui::PopItemWidth();
+                if (currentSet < 0 || currentSet >= 3)
+                    currentSet = 0;
 
-            ShowHelpMarker("Set DLSSG interpolation count");
+                ImGui::PushItemWidth(100.0f * menuResScale);
+                if (ImGui::BeginCombo("MFG Ratio##DLSSG", intModes[currentSet]))
+                {
+                    for (int i = 0; i < maxInterpolationCount && i < 3; i++)
+                    {
+                        if (ImGui::Selectable(intModes[i], (currentSet == i)))
+                        {
+                            LOG_DEBUG("DLSSG Interpolation Count set to: {}", i + 1);
+                            config->FGDLSSGInterpolationCount = i + 1;
+                            config->FGDLSSGOverrideInterpolationCount = i + 1;
+                            config->FGDLSSGAmpereMfgMaxFrames = i + 1;
+                            fgOutput->SetInterpolatedFrameCount(i + 1);
+                            state.fgChanged = true;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::PopItemWidth();
+                ShowHelpMarker("Select desired multi-frame multiplier for RTX 20/30 (2X up to 4X). Forced in OptiFG.");
+            }
 
             ImGui::EndDisabled();
 
-            if (fgOutput->GetDMFGSupport())
+            bool qGuard = config->FGDLSSGQualityGuard.value_or_default();
+            if (ImGui::Checkbox("Quality Guard (Anti-Flicker)##DLSSG", &qGuard))
             {
-                ImGui::SameLine(0.0f, 16.0f);
-
-                if (bool dynamicMFG = config->FGDLSSGForceDMFG.value_or_default();
-                    ImGui::Checkbox("Force Dynamic MFG", &dynamicMFG))
-                {
-                    config->FGDLSSGForceDMFG = dynamicMFG;
-                }
-
-                ImGui::BeginDisabled(!config->FGDLSSGForceDMFG.value_or_default());
-                static float fpsTarget = config->FGDLSSGFramerateTargetDMFG.value_or_default();
-                ImGui::SliderFloat("DMFG FPS Target", &fpsTarget, 0, 200, "%.0f");
-
-                ShowHelpMarker("An active limit of 0 means auto-detect the display refresh rate");
-
-                if (ImGui::Button("Apply Target"))
-                {
-                    config->FGDLSSGFramerateTargetDMFG = fpsTarget;
-                }
-
-                ImGui::SameLine(0.0f, 16.0f);
-
-                if (ImGui::Button("Reset Target"))
-                {
-                    fpsTarget = 0.0f;
-                    config->FGDLSSGFramerateTargetDMFG.reset();
-                }
-
-                ImGui::EndDisabled();
+                config->FGDLSSGQualityGuard = qGuard;
             }
+            ShowHelpMarker("Prevents flickering and ghosting in 3X/4X/6X multi-frame modes");
+        }
+
+        if (fgOutput->GetDMFGSupport())
+        {
+            if (bool dynamicMFG = config->FGDLSSGForceDMFG.value_or_default();
+                ImGui::Checkbox("Force Dynamic MFG", &dynamicMFG))
+            {
+                config->FGDLSSGForceDMFG = dynamicMFG;
+            }
+
+            ImGui::BeginDisabled(!config->FGDLSSGForceDMFG.value_or_default());
+            static float fpsTarget = config->FGDLSSGFramerateTargetDMFG.value_or_default();
+            ImGui::SliderFloat("DMFG FPS Target", &fpsTarget, 0, 200, "%.0f");
+
+            ShowHelpMarker("An active limit of 0 means auto-detect the display refresh rate");
+
+            if (ImGui::Button("Apply Target"))
+            {
+                config->FGDLSSGFramerateTargetDMFG = fpsTarget;
+            }
+
+            ImGui::SameLine(0.0f, 16.0f);
+
+            if (ImGui::Button("Reset Target"))
+            {
+                fpsTarget = 0.0f;
+                config->FGDLSSGFramerateTargetDMFG.reset();
+            }
+
+            ImGui::EndDisabled();
         }
 
         bool useGamesMarkers = config->FGDLSSGUseGamesReflexMarkers.value_or_default();
@@ -4284,6 +4381,13 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
             LOG_DEBUG("Changed set FGDLSSGUseGamesReflexMarkers: {}", useGamesMarkers);
         }
         ImGui::EndDisabled();
+    }
+    else if (state.activeFgOutput == FGOutput::DLSSG && state.activeFgInput != FGInput::NoFG &&
+             state.currentFGSwapchain == nullptr)
+    {
+        ImGui::SeparatorText("Frame Generation (NVIDIA DLSS-G / OptiFG)");
+        ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.8f, 0.2f, 1.f)),
+                           "OptiFG swapchain initializing... Resume gameplay to activate.");
     }
 
     // OptiFG

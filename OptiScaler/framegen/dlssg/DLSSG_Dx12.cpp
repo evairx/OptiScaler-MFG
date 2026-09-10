@@ -31,6 +31,15 @@ void UpdateVerifiedMfgCapabilities(int& maxInterpolationCount)
         return;
     }
 
+    if (Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default())
+    {
+        int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
+        if (ampereMax < 1 || ampereMax > 3)
+            ampereMax = 3;
+        maxInterpolationCount = std::max(maxInterpolationCount, ampereMax);
+        return;
+    }
+
     maxInterpolationCount = std::max(maxInterpolationCount, 1);
 }
 
@@ -57,6 +66,15 @@ int DLSSG_Dx12::GetMaxInterpolationCount() const
         auto unlocked = MfgUnlock::UnlockedMax();
         return unlocked > 0 ? static_cast<int>(unlocked) : 5;
     }
+
+    if (Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default())
+    {
+        int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
+        if (ampereMax < 1 || ampereMax > 3)
+            ampereMax = 3;
+        return ampereMax;
+    }
+
     if (_maxInterpolationCount > 1)
         return _maxInterpolationCount;
     return 1;
@@ -672,7 +690,19 @@ void* DLSSG_Dx12::SwapchainContext() { return (void*) 0x23372337; }
 
 DLSSG_Dx12::~DLSSG_Dx12() { Shutdown(); }
 
-bool DLSSG_Dx12::SetInterpolatedFrameCount(UINT interpolatedFrameCount) { return true; }
+bool DLSSG_Dx12::SetInterpolatedFrameCount(UINT interpolatedFrameCount)
+{
+    const int maxCount = GetMaxInterpolationCount();
+    int count = static_cast<int>(interpolatedFrameCount);
+    if (count > maxCount)
+        count = maxCount;
+    if (count < 1)
+        count = 1;
+
+    _framesToInterpolate = count;
+    LOG_INFO("DLSSG_Dx12: target interpolated frames set to {}", _framesToInterpolate);
+    return true;
+}
 
 void DLSSG_Dx12::EvaluateState(ID3D12Device* device, FG_Constants& fgConstants)
 {

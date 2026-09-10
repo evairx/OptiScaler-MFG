@@ -808,7 +808,7 @@ void InitNGXParameters(NVSDK_NGX_Parameter* InParams, API api)
         InParams->Set(NVSDK_NGX_Parameter_FrameInterpolation_NeedsUpdatedDriver, 0);
         InParams->Set(NVSDK_NGX_Parameter_FrameInterpolation_FeatureInitResult, 1);
 
-        // Advertise the multi-frame ceiling when Ada MFG unlock is enabled (default up to 5 = 6X)
+        // Advertise the multi-frame ceiling when Ada MFG unlock or Ampere/Turing MFG is enabled
         uint32_t countMax = 1;
         if (Config::Instance()->FGDLSSGAdaMfgUnlock.value_or_default() ||
             Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
@@ -816,6 +816,13 @@ void InitNGXParameters(NVSDK_NGX_Parameter* InParams, API api)
             MfgUnlock::TryApply();
             countMax = MfgUnlock::UnlockedMax();
             if (countMax == 0) countMax = 5;
+        }
+        else if (Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default())
+        {
+            int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
+            if (ampereMax < 1 || ampereMax > 3)
+                ampereMax = 3;
+            countMax = static_cast<uint32_t>(ampereMax);
         }
         InParams->Set("DLSSG.MultiFrameCountMax", countMax);
 
