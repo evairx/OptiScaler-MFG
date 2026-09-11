@@ -143,6 +143,17 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
 
     _width = desc->BufferDesc.Width;
     _height = desc->BufferDesc.Height;
+    if ((_width == 0 || _height == 0) && desc->OutputWindow != nullptr)
+    {
+        RECT clientRect {};
+        if (GetClientRect(desc->OutputWindow, &clientRect))
+        {
+            if (_width == 0)
+                _width = clientRect.right - clientRect.left;
+            if (_height == 0)
+                _height = clientRect.bottom - clientRect.top;
+        }
+    }
 
     IDXGIFactory* slFactory = nullptr;
     if (!Util::CheckForRealObject(__FUNCTION__, factory, (IUnknown**) &slFactory))
@@ -173,6 +184,12 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
     {
         LOG_ERROR("CreateSwapChain error: {:X}", (UINT) result);
         return false;
+    }
+
+    if (swapChain != nullptr && *swapChain != nullptr && StreamlineProxy::UpgradeInterface() != nullptr)
+    {
+        auto upgradeResult = StreamlineProxy::UpgradeInterface()((void**) swapChain);
+        LOG_INFO("DLSSG_Dx12: slUpgradeInterface for SwapChain result: {} ({})", magic_enum::enum_name(upgradeResult), (UINT) upgradeResult);
     }
 
     sl::DLSSGState dlssgState {};
@@ -262,6 +279,17 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
 
     _width = desc->Width;
     _height = desc->Height;
+    if ((_width == 0 || _height == 0) && hwnd != nullptr)
+    {
+        RECT clientRect {};
+        if (GetClientRect(hwnd, &clientRect))
+        {
+            if (_width == 0)
+                _width = clientRect.right - clientRect.left;
+            if (_height == 0)
+                _height = clientRect.bottom - clientRect.top;
+        }
+    }
 
     {
         ScopedSkipSpoofingGlobal skipSpoofingGlobal {};
@@ -296,6 +324,12 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
         {
             LOG_ERROR("CreateSwapChain error: {:X}", (UINT) result);
             return false;
+        }
+
+        if (swapChain != nullptr && *swapChain != nullptr && StreamlineProxy::UpgradeInterface() != nullptr)
+        {
+            auto upgradeResult = StreamlineProxy::UpgradeInterface()((void**) swapChain);
+            LOG_INFO("DLSSG_Dx12: slUpgradeInterface for SwapChain1 result: {} ({})", magic_enum::enum_name(upgradeResult), (UINT) upgradeResult);
         }
     }
 
@@ -334,6 +368,9 @@ void DLSSG_Dx12::CreateContext(ID3D12Device* device, FG_Constants& fgConstants)
 
     if (_device != nullptr)
         return;
+
+    if (device != nullptr && StreamlineProxy::UpgradeInterface() != nullptr)
+        StreamlineProxy::UpgradeInterface()((void**) &device);
 
     _device = device;
     CreateObjects(device);
@@ -455,6 +492,23 @@ bool DLSSG_Dx12::Dispatch()
         _framesToInterpolate = targetCount;
     }
 
+    if (_swapChain != nullptr)
+    {
+        DXGI_SWAP_CHAIN_DESC scDesc {};
+        if (SUCCEEDED(_swapChain->GetDesc(&scDesc)))
+        {
+            if (scDesc.BufferDesc.Width > 0)
+                _width = scDesc.BufferDesc.Width;
+            if (scDesc.BufferDesc.Height > 0)
+                _height = scDesc.BufferDesc.Height;
+        }
+    }
+
+    auto depthRes = GetResource(FG_ResourceType::Depth, fIndex);
+    auto mvRes = GetResource(FG_ResourceType::Velocity, fIndex);
+    auto hudlessRes = GetResource(FG_ResourceType::HudlessColor, fIndex);
+    auto uiRes = GetResource(FG_ResourceType::UIColor, fIndex);
+
     sl::DLSSGOptions options;
     options.mode = sl::DLSSGMode::eOn;
     options.numFramesToGenerate = _framesToInterpolate;
@@ -463,6 +517,53 @@ bool DLSSG_Dx12::Dispatch()
     options.colorWidth = _width;
     options.colorHeight = _height;
     options.colorBufferFormat = (uint32_t) State::Instance().currentSwapchainDesc.BufferDesc.Format;
+
+    if (options.colorBufferFormat == 0 && _swapChain != nullptr)
+    {
+        DXGI_SWAP_CHAIN_DESC scDesc {};
+        if (SUCCEEDED(_swapChain->GetDesc(&scDesc)))
+        {
+            options.colorBufferFormat = (uint32_t) scDesc.BufferDesc.Format;
+            if (options.numBackBuffers <= 0)
+                options.numBackBuffers = scDesc.BufferCount;
+        }
+    }
+    if (options.colorBufferFormat == 0)
+        options.colorBufferFormat = (uint32_t) DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    if (depthRes != nullptr && depthRes->width > 0 && depthRes->height > 0)
+    {
+        options.mvecDepthWidth = depthRes->width;
+        options.mvecDepthHeight = depthRes->height;
+    }
+    else
+    {
+        options.mvecDepthWidth = _width;
+        options.mvecDepthHeight = _height;
+    }
+
+    if (depthRes != nullptr && depthRes->resource != nullptr)
+        options.depthBufferFormat = (uint32_t) depthRes->resource->GetDesc().Format;
+
+    if (mvRes != nullptr && mvRes->resource != nullptr)
+        options.mvecBufferFormat = (uint32_t) mvRes->resource->GetDesc().Format;
+
+    if (hudlessRes != nullptr && hudlessRes->resource != nullptr)
+        options.hudLessBufferFormat = (uint32_t) hudlessRes->resource->GetDesc().Format;
+
+    if (uiRes != nullptr && uiRes->resource != nullptr)
+        options.uiBufferFormat = (uint32_t) uiRes->resource->GetDesc().Format;
+
+    if (hudlessRes != nullptr && hudlessRes->resource != nullptr &&
+        uiRes != nullptr && uiRes->resource != nullptr &&
+        !Config::Instance()->FGDisableHudless.value_or_default())
+    {
+        options.enableUserInterfaceRecomposition = sl::Boolean::eTrue;
+    }
+    else
+    {
+        options.enableUserInterfaceRecomposition = sl::Boolean::eFalse;
+    }
 
     if (Config::Instance()->FGDLSSGForceDMFG.value_or_default() && _supportsDMFG)
     {
@@ -721,10 +822,11 @@ bool DLSSG_Dx12::Dispatch()
         return false;
     }
 
-    if (State::Instance().currentFGSwapchain != nullptr)
+    auto scForIndex = _swapChain != nullptr ? _swapChain : State::Instance().currentFGSwapchain;
+    if (scForIndex != nullptr)
     {
         IDXGISwapChain3* sc3 = nullptr;
-        if (State::Instance().currentFGSwapchain->QueryInterface(IID_PPV_ARGS(&sc3)) == S_OK && sc3 != nullptr)
+        if (scForIndex->QueryInterface(IID_PPV_ARGS(&sc3)) == S_OK && sc3 != nullptr)
         {
             sc3->GetCurrentBackBufferIndex();
             sc3->Release();
@@ -750,6 +852,10 @@ bool DLSSG_Dx12::Dispatch()
                     LOG_WARN("DLSSG: eFailResolutionTooLow flagged");
                 if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailHDRFormatNotSupported))
                     LOG_WARN("DLSSG: eFailHDRFormatNotSupported flagged");
+            }
+            else
+            {
+                LOG_DEBUG("DLSSG status OK, frames presented: {}", dlssgCheckState.numFramesActuallyPresented);
             }
         }
     }
@@ -1338,6 +1444,9 @@ bool DLSSG_Dx12::SetResource(Dx12Resource* inputResource)
 
             if (StreamlineProxy::SetTagForFrame() == nullptr)
                 return false;
+
+            if (fResource->cmdList != nullptr && StreamlineProxy::UpgradeInterface() != nullptr)
+                StreamlineProxy::UpgradeInterface()((void**) &fResource->cmdList);
 
             auto result = StreamlineProxy::SetTagForFrame()(*frameToken, viewport, &resourceTag, 1, fResource->cmdList);
             LOG_DEBUG("SetTagForFrame, frameId: {}, type: {} result: {} ({})", frameId, magic_enum::enum_name(type),

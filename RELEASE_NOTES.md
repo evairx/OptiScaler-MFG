@@ -1,24 +1,23 @@
-# OptiScaler-MFG v10.0.2-pre5 (Private Test Build)
+# OptiScaler-MFG v10.0.2-pre6 (Private Test Build)
 
-Welcome to **OptiScaler-MFG (v10.0.2-pre5)**! 🚀 🎮
+Welcome to **OptiScaler-MFG (v10.0.2-pre6)**! 🚀 🎮
 
-### 🆕 What's New in v10.0.2-pre5:
-- **Unconditional Camera Projection & Clip-Matrix Construction (Fixes `eFailCommonConstantsInvalid`)**:
-  - Resolved a critical scoping bug in `DLSSG_Dx12.cpp` where projection matrix generation (`cameraViewToClip`, `clipToCameraView`, `clipToPrevClip`, `prevClipToClip`, `clipToLensClip`, FOV, and aspect ratio) was trapped inside an `else` branch that only executed when the camera position was exactly `(0, 0, 0)`.
-  - In real 3D gameplay (such as *Running Train* and *Dying Light: The Beast*), camera position was non-zero, causing Streamline's DLSS-G constants to receive all-zero clip matrices. `sl.dlss_g.dll` immediately flagged `eFailCommonConstantsInvalid` (0x8) and dropped all frame interpolation.
-  - Perspective projection and inter-frame clip matrices are now computed unconditionally every frame, maintaining valid historical clip matrices across frames.
-- **Synchronized Frame Tokens & Full Synthetic Reflex Lifecycle**:
-  - Unified frame token acquisition so `DLSSG_Dx12::Dispatch()` and `FGHooks::FGPresent()` share the exact same `sl::FrameToken` instance and token ID.
-  - DLSS-G now emits the complete synthetic Reflex lifecycle (`eSimulationStart`, `eSimulationEnd`, `eRenderSubmitStart`, `eRenderSubmitEnd`) during frame dispatch, followed by `ePresentStart` and `ePresentEnd` around `Present()`.
-  - Eliminates `eFailReflexNotDetectedAtRuntime` and `eFailGetCurrentBackBufferIndexNotCalled`, ensuring Streamline's frame generation scheduler accepts and presents interpolated frames.
-- **Streamline Manual Hooking Interface Upgrades**:
-  - Upgraded D3D12 device and command queue interfaces via `slUpgradeInterface` in `InitWithD3D12`, `CreateSwapchain`, and `CreateSwapchain1`.
-- **Dynamic Runtime Ada MFG Unlock**:
-  - Added dynamic `MfgUnlock::TryApply()` checks during frame dispatch to guarantee that in-memory patching for 6X unlocks occurs as soon as `nvngx_dlssg.dll` is loaded by Streamline, eliminating race conditions with late-loading plugins.
-- **Physical Presentation Measurement in Overlay**:
-  - Reverted synthetic multiplication math in the performance overlay. The overlay now accurately reflects actual presents delivered to DXGI and the display, matching external measurement tools (such as MSI Afterburner).
+### 🆕 What's New in v10.0.2-pre6:
+- **Streamline Swapchain Interface Upgrade (Why XeFG worked and DLSS-G didn't)**:
+  - **Root Cause Analysis**: Intel XeFG worked because it wraps the DXGI swapchain directly via `D3D12InitFromSwapChainDesc` and `D3D12GetSwapChainPtr`, returning an Intel proxy swapchain whose `Present` invokes optical flow and generates extra DXGI frames (visible in MSI Afterburner).
+  - Conversely, NVIDIA Streamline manual hooking requires calling `slUpgradeInterface(reinterpret_cast<void**>(swapChain))` immediately upon creation. Previously, OptiScaler called `slUpgradeInterface` on `device`, `factory`, and `commandQueue`, but **NEVER on `swapChain`**!
+  - Without the swapchain upgrade, the swapchain remained a raw DXGI swapchain. OptiScaler's presentation hook called the raw DXGI present, completely bypassing Streamline's DLSS-G presentation pipeline (`sl.dlss_g.dll` was never triggered at `Present()`).
+  - **The Fix**: `DLSSG_Dx12::CreateSwapchain` and `CreateSwapchain1` now call `slUpgradeInterface((void**) swapChain)`, replacing the pointer in-place with Streamline's proxy swapchain (`sl::IProxySwapChain`). OptiScaler detours Streamline's proxy swapchain, ensuring `o_FGSCPresent()` enters Streamline's optical flow and frame interpolation pipeline!
+- **Strict Reflex Marker Sequencing in `FGHooks::FGPresent`**:
+  - Reordered `FGPresent` so that `fg->Present()` (which runs `DLSSG_Dx12::Dispatch()`) executes **before** `ePresentStart`.
+  - Previously, `ePresentStart` was emitted before simulation markers on an old frame token. The new frame token was generated inside `Dispatch()` with simulation and render markers, but never received `ePresentStart`.
+  - The correct lifecycle is now strictly enforced on the unified frame token: `eSimulationStart` -> `eSimulationEnd` -> `eRenderSubmitStart` -> `eRenderSubmitEnd` -> `GetCurrentBackBufferIndex()` -> `ePresentStart` -> `o_FGSCPresent()` -> `ePresentEnd`.
+- **Complete `sl::DLSSGOptions` Buffer Format & Dimension Mapping**:
+  - Automatically queries the active swapchain description dynamically to ensure `_width`, `_height`, `colorBufferFormat`, and `numBackBuffers` are never 0.
+  - Populates native input resource formats (`depthBufferFormat`, `mvecBufferFormat`, `hudLessBufferFormat`, `uiBufferFormat`) and dimensions directly into Streamline options.
+  - Automatically manages `enableUserInterfaceRecomposition` according to active HUDless and UI resources.
 - **Preserved Fallbacks**:
-  - FSR 3.1 FG and Intel XeFG fallbacks remain 100% untouched and functional.
+  - Intel XeFG and FSR 3.1 FG remain 100% intact and functional.
 
 ---
 

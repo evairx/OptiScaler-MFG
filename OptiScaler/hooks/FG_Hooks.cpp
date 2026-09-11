@@ -1197,8 +1197,6 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
 
     const bool fgFeatureActive = fg != nullptr && fg->IsActive() && !fg->IsPaused();
 
-    sl::FrameToken* localToken = nullptr;
-    sl::Result tokenResult = sl::Result::eErrorReflexAPI;
     if (willPresent && fg != nullptr)
     {
         if (fgFeatureActive && state.activeFgOutput == FGOutput::DLSSG)
@@ -1207,6 +1205,22 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
             state.dlssgDetectedInterpolationCount = 0;
     }
 
+    if (willPresent && fgFeatureActive)
+    {
+        if (state.activeFgInput == FGInput::FSRFG)
+            ffxPresentCallback();
+        else if (state.activeFgInput == FGInput::FSRFG30)
+            FSR3FG::ffxPresentCallback();
+
+        fg->Present();
+    }
+    else if (willPresent && fg != nullptr)
+    {
+        LOG_TRACE("FGHooks::FGPresent: FG feature exists but is inactive/paused; pass-through present only");
+    }
+
+    sl::FrameToken* localToken = nullptr;
+    sl::Result tokenResult = sl::Result::eErrorReflexAPI;
     if (willPresent && fgFeatureActive && state.activeFgOutput == FGOutput::DLSSG)
     {
         auto dlssg = dynamic_cast<DLSSG_Dx12*>(fg);
@@ -1237,20 +1251,6 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
                 StreamlineProxy::PCLSetMarker()(sl::PCLMarker::ePresentStart, *localToken);
             }
         }
-    }
-
-    if (willPresent && fgFeatureActive)
-    {
-        if (state.activeFgInput == FGInput::FSRFG)
-            ffxPresentCallback();
-        else if (state.activeFgInput == FGInput::FSRFG30)
-            FSR3FG::ffxPresentCallback();
-
-        fg->Present();
-    }
-    else if (willPresent && fg != nullptr)
-    {
-        LOG_TRACE("FGHooks::FGPresent: FG feature exists but is inactive/paused; pass-through present only");
     }
 
     if (willPresent && state.swapchainInteropApi == SwapchainInteropApi::None)
