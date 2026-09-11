@@ -453,6 +453,10 @@ bool DLSSG_Dx12::Dispatch()
     options.mode = sl::DLSSGMode::eOn;
     options.numFramesToGenerate = _framesToInterpolate;
     options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
+    options.numBackBuffers = State::Instance().currentSwapchainDesc.BufferCount > 0 ? State::Instance().currentSwapchainDesc.BufferCount : 3;
+    options.colorWidth = _width;
+    options.colorHeight = _height;
+    options.colorBufferFormat = (uint32_t) State::Instance().currentSwapchainDesc.Format;
 
     if (Config::Instance()->FGDLSSGForceDMFG.value_or_default() && _supportsDMFG)
     {
@@ -496,7 +500,7 @@ bool DLSSG_Dx12::Dispatch()
     {
         sl::ReflexOptions reflexConst = {};
         reflexConst.mode = sl::ReflexMode::eLowLatency;
-        reflexConst.useMarkersToOptimize = ReflexHooks::gameIsSendingMarkers();
+        reflexConst.useMarkersToOptimize = sl::Boolean::eTrue;
 
         auto reflexSetOptionsResult = StreamlineProxy::ReflexSetOptions()(reflexConst);
 
@@ -566,24 +570,20 @@ bool DLSSG_Dx12::Dispatch()
         constData.cameraFwd = { 1.0f, 0.0f, 0.0f };
         constData.cameraPinholeOffset = { 0.0f, 0.0f };
 
-        XMMATRIX cameraViewToClip {};
+        float nearZ = (_cameraNear[fIndex] > 0.0001f && !std::isnan(_cameraNear[fIndex]) && !std::isinf(_cameraNear[fIndex]))
+                          ? _cameraNear[fIndex]
+                          : 0.1f;
+        float farZ = (_cameraFar[fIndex] > nearZ && !std::isnan(_cameraFar[fIndex]) && !std::isinf(_cameraFar[fIndex]))
+                         ? _cameraFar[fIndex]
+                         : (nearZ + 10000.0f);
+        float vfov = (_cameraVFov[fIndex] > 0.01f && _cameraVFov[fIndex] < 3.1415f && !std::isnan(_cameraVFov[fIndex]))
+                         ? _cameraVFov[fIndex]
+                         : DirectX::XMConvertToRadians(60.0f);
+        float aspect = (_cameraAspectRatio[fIndex] > 0.01f && !std::isnan(_cameraAspectRatio[fIndex]))
+                           ? _cameraAspectRatio[fIndex]
+                           : (_width > 0 && _height > 0 ? ((float) _width / (float) _height) : (16.0f / 9.0f));
 
-        // XMMatrixPerspectiveFovRH will fail if input values are incorrect
-        if (_cameraNear[fIndex] > 0.f && _cameraFar[fIndex] > 0.f &&
-            !XMScalarNearEqual(_cameraVFov[fIndex], 0.0f, 0.00001f) &&
-            !XMScalarNearEqual(_cameraAspectRatio[fIndex], 0.0f, 0.00001f))
-        {
-            if (XMScalarNearEqual(_cameraNear[fIndex], _cameraFar[fIndex], 0.00001f))
-                _cameraFar[fIndex]++;
-
-            cameraViewToClip = XMMatrixPerspectiveFovRH(_cameraVFov[fIndex], _cameraAspectRatio[fIndex],
-                                                        _cameraNear[fIndex], _cameraFar[fIndex]);
-        }
-        else
-        {
-            LOG_WARN("Can't calculate projectionMatrix");
-        }
-
+        XMMATRIX cameraViewToClip = XMMatrixPerspectiveFovRH(vfov, aspect, nearZ, farZ);
         XMMATRIX clipToCameraView = XMMatrixInverse(nullptr, cameraViewToClip);
 
         auto prev = XMMatrixIdentity();
@@ -599,12 +599,12 @@ bool DLSSG_Dx12::Dispatch()
         memcpy(&constData.clipToLensClip, &temp, sizeof(sl::float4x4));
         memcpy(&constData.clipToPrevClip, &temp, sizeof(sl::float4x4));
         memcpy(&constData.prevClipToClip, &temp, sizeof(sl::float4x4));
-    }
 
-    constData.cameraAspectRatio = _cameraAspectRatio[fIndex];
-    constData.cameraFOV = _cameraVFov[fIndex];
-    constData.cameraNear = _cameraNear[fIndex];
-    constData.cameraFar = _cameraFar[fIndex];
+        constData.cameraAspectRatio = aspect;
+        constData.cameraFOV = vfov;
+        constData.cameraNear = nearZ;
+        constData.cameraFar = farZ;
+    }
 
     constData.jitterOffset.x = _jitterX[fIndex];
     constData.jitterOffset.y = _jitterY[fIndex];
@@ -619,8 +619,15 @@ bool DLSSG_Dx12::Dispatch()
             return false;
         }
 
-        constData.mvecScale.x = _mvScaleX[fIndex] / (float) mv->width;
-        constData.mvecScale.y = _mvScaleY[fIndex] / (float) mv->height;
+        float scaleX = _mvScaleX[fIndex];
+        float scaleY = _mvScaleY[fIndex];
+        if (scaleX == 0.0f)
+            scaleX = 1.0f;
+        if (scaleY == 0.0f)
+            scaleY = 1.0f;
+
+        constData.mvecScale.x = scaleX / (float) mv->width;
+        constData.mvecScale.y = scaleY / (float) mv->height;
     }
 
     // LOG_DEBUG("MvRes: {}x{}, Games MvScale : {}x{}, SL MvScale: {}x{}", mv->width, mv->height, _mvScaleX[fIndex],
@@ -679,6 +686,16 @@ bool DLSSG_Dx12::Dispatch()
         Deactivate();
 
         return false;
+    }
+
+    if (State::Instance().currentFGSwapchain != nullptr)
+    {
+        IDXGISwapChain3* sc3 = nullptr;
+        if (State::Instance().currentFGSwapchain->QueryInterface(IID_PPV_ARGS(&sc3)) == S_OK && sc3 != nullptr)
+        {
+            sc3->GetCurrentBackBufferIndex();
+            sc3->Release();
+        }
     }
 
     if (StreamlineProxy::DLSSGGetState() != nullptr)

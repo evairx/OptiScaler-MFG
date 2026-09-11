@@ -4,6 +4,8 @@
 #include <resource_tracking/ResTrack_dx12.h>
 #include "shaders/depth_scale/DS_Dx12.h"
 #include "MathUtils.h"
+#include <proxies/Streamline_Proxy.h>
+#include <hooks/Reflex_Hooks.h>
 
 using namespace OptiMath;
 static DS_Dx12* DepthScale = nullptr;
@@ -134,6 +136,22 @@ void UpscalerInputsDx12::UpscaleStart(ID3D12GraphicsCommandList* InCmdList, NVSD
     fg->SetJitter(jitterX, jitterY);
     fg->SetReset(reset);
     fg->SetInterpolationRect(feature->DisplayWidth(), feature->DisplayHeight());
+
+    if (State::Instance().activeFgOutput == FGOutput::DLSSG &&
+        (!ReflexHooks::gameIsSendingMarkers() || !Config::Instance()->FGDLSSGUseGamesReflexMarkers.value_or_default()))
+    {
+        if (StreamlineProxy::PCLSetMarker() != nullptr && StreamlineProxy::GetNewFrameToken() != nullptr)
+        {
+            sl::FrameToken* token = nullptr;
+            const uint32_t frameId = (uint32_t) fg->FrameCount();
+            if (StreamlineProxy::GetNewFrameToken()(token, &frameId) == sl::Result::eOk && token != nullptr)
+            {
+                StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eSimulationStart, *token);
+                StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eSimulationEnd, *token);
+                StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eRenderSubmitStart, *token);
+            }
+        }
+    }
 
     Hudfix_Dx12::UpscaleStart();
 
@@ -313,6 +331,20 @@ void UpscalerInputsDx12::UpscaleEnd(ID3D12GraphicsCommandList* InCmdList, NVSDK_
 
                     fg->SetResource(&setResource);
                     LOG_DEBUG("(FG) Tagged upscaler output as HudlessColor for DLSSG frameIndex: {}", fIndex);
+                }
+            }
+        }
+
+        if (State::Instance().activeFgOutput == FGOutput::DLSSG &&
+            (!ReflexHooks::gameIsSendingMarkers() || !Config::Instance()->FGDLSSGUseGamesReflexMarkers.value_or_default()))
+        {
+            if (StreamlineProxy::PCLSetMarker() != nullptr && StreamlineProxy::GetNewFrameToken() != nullptr)
+            {
+                sl::FrameToken* token = nullptr;
+                const uint32_t frameId = (uint32_t) fg->FrameCount();
+                if (StreamlineProxy::GetNewFrameToken()(token, &frameId) == sl::Result::eOk && token != nullptr)
+                {
+                    StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eRenderSubmitEnd, *token);
                 }
             }
         }

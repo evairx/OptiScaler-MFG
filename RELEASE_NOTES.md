@@ -1,18 +1,24 @@
-# OptiScaler-MFG v10.0.2-pre3 (Private Test Build)
+# OptiScaler-MFG v10.0.2-pre4 (Private Test Build)
 
-Welcome to **OptiScaler-MFG (v10.0.2-pre3)**! 🚀 🎮
+Welcome to **OptiScaler-MFG (v10.0.2-pre4)**! 🚀 🎮
 
-### 🆕 What's New in v10.0.2-pre3:
-- **OptiFG $\to$ Real NVIDIA DLSS-G Hardware MFG Bridge**:
-  - Restored Streamline swapchain hooks (`hooks` and `exclusive_hooks` in `sl.dlss_g.json`) when DLSS-G is the active frame generation output (`activeFgOutput == FGOutput::DLSSG`). Allows `sl.dlss_g.dll` to intercept `IDXGISwapChain::Present` and execute real hardware frame interpolation on NVIDIA Tensor Cores.
-  - Preserves `sl::kFeatureDLSS_G` and `sl::kFeatureReflex` feature loading in OptiFG mode so Streamline properly initializes the NVIDIA DLSS-G interposer and plugin pipeline.
-  - Enables architecture spoofing for DLSS-G output on Ampere and Turing GPUs so RTX 30 and RTX 20 series can run real Tensor Core MFG through OptiFG.
-- **Direct Color/HUDLess Buffer Feeding to DLSS-G**:
-  - Automatically feeds the upscaled output buffer directly as `FG_ResourceType::HudlessColor` with `UntilPresentFromDispatch` validity if HUD fix did not capture a separate buffer, satisfying DLSS-G's color buffer requirements in games like *Running Train*.
-- **DLSS-G Runtime Diagnostic Logging**:
-  - Added real-time status inspection of `slDLSSGGetState` after dispatch, actively logging warnings for any flag failures (`eFailCommonConstantsInvalid`, `eFailReflexNotDetectedAtRuntime`, `eFailGetCurrentBackBufferIndexNotCalled`, etc.).
-- **Fallback Outputs Intact**:
-  - Preserves full fallback support for FSR 3.1 FG and XeFG when user selects them.
+### 🆕 What's New in v10.0.2-pre4:
+- **Streamline Swapchain Interception Preservation (Real Hardware Frame Presentation)**:
+  - Fixed critical swapchain wrapping across `DxgiFactory_Hooks.cpp`, `DxgiFactory_WrappedCalls.cpp`, and `D3D11_Hooks.cpp`. Previously, OptiScaler stripped Streamline's proxy swapchain down to the physical hardware swapchain (`realSC`), causing `WrappedIDXGISwapChain4::Present()` to call the GPU swapchain directly and bypass Streamline's `Present()` hook entirely.
+  - When `activeFgOutput == FGOutput::DLSSG`, `WrappedIDXGISwapChain4` now directly wraps Streamline's proxy swapchain (`*ppSwapChain`), ensuring Streamline's `Present()` executes, generating and presenting all interpolated frames to the screen.
+- **Synthetic Reflex Runtime Lifecycle Injection**:
+  - NVIDIA DLSS-G strictly requires Reflex runtime markers during frame rendering. In games without native Reflex (*Running Train*), OptiScaler now injects the full Reflex marker sequence:
+    - `eSimulationStart`, `eSimulationEnd`, and `eRenderSubmitStart` at `UpscaleStart`.
+    - `eRenderSubmitEnd` at `UpscaleEnd`.
+    - `ePresentStart` and `ePresentEnd` at `FGPresent`.
+    - Sets `useMarkersToOptimize = sl::Boolean::eTrue` in `ReflexSetOptions` and actively invokes `GetCurrentBackBufferIndex()`.
+    - Completely eliminates `eFailReflexNotDetectedAtRuntime` and `eFailGetCurrentBackBufferIndexNotCalled`.
+- **Bulletproof Projection Matrix & Motion Vector Sanitation**:
+  - Handled cases where games provide inverted, infinite, or missing camera near/far planes and FOV values, guaranteeing valid perspective projection matrices (`cameraViewToClip` and `clipToCameraView`) and non-zero motion vector scales. Completely eliminates `eFailCommonConstantsInvalid`.
+- **Corrected DLSS-G Overlay Framerate Math**:
+  - Fixed overlay FPS calculation for DLSS-G: since `LocalPresent` is called once per game base frame while Streamline presents interpolated frames internally, `baseFps` is the measured render rate and `totalFps = baseFps * mult` (e.g. 75 base $\to$ 450 total at 6X), fixing the previous visual anomaly where 100 FPS base was displayed as 16 real FPS.
+- **Untouched Fallback Outputs**:
+  - FSR 3.1 FG and Intel XeFG fallbacks remain 100% untouched and fully functional.
 
 ---
 

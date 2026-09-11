@@ -435,7 +435,10 @@ static HRESULT hkD3D11CreateDeviceAndSwapChain(IDXGIAdapter* pAdapter, D3D_DRIVE
         }
         else
         {
-            *ppSwapChain = new WrappedIDXGISwapChain4(realSC, realDevice, pSwapChainDesc->OutputWindow,
+            IDXGISwapChain* scToWrap = (State::Instance().activeFgOutput == FGOutput::DLSSG)
+                                           ? (IDXGISwapChain*) *ppSwapChain
+                                           : (IDXGISwapChain*) realSC;
+            *ppSwapChain = new WrappedIDXGISwapChain4(scToWrap, realDevice, pSwapChainDesc->OutputWindow,
                                                       pSwapChainDesc->Flags, false);
 
             State::Instance().currentSwapchain = *ppSwapChain;

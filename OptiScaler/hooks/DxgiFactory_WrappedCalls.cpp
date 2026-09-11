@@ -393,8 +393,11 @@ HRESULT DxgiFactoryWrappedCalls::CreateSwapChain(IDXGIFactory* realFactory, Wrap
             WrappedIDXGISwapChain4* wrapped;
             if ((*ppSwapChain)->QueryInterface(IID_PPV_ARGS(&wrapped)) != S_OK)
             {
+                IDXGISwapChain* scToWrap = (State::Instance().activeFgOutput == FGOutput::DLSSG)
+                                               ? (IDXGISwapChain*) *ppSwapChain
+                                               : (IDXGISwapChain*) realSC;
                 *ppSwapChain =
-                    new WrappedIDXGISwapChain4(realSC, realDevice, localDesc.OutputWindow, localDesc.Flags, false);
+                    new WrappedIDXGISwapChain4(scToWrap, realDevice, localDesc.OutputWindow, localDesc.Flags, false);
 
                 // Set as currentSwapchain is FG is disabled
                 if (!_skipFGSwapChainCreation)
@@ -792,7 +795,10 @@ HRESULT DxgiFactoryWrappedCalls::CreateSwapChainForHwnd(IDXGIFactory2* realFacto
             WrappedIDXGISwapChain4* wrapped;
             if ((*ppSwapChain)->QueryInterface(IID_PPV_ARGS(&wrapped)) != S_OK)
             {
-                *ppSwapChain = new WrappedIDXGISwapChain4(realSC, readDevice, hWnd, localDesc.Flags, false);
+                IDXGISwapChain* scToWrap = (State::Instance().activeFgOutput == FGOutput::DLSSG)
+                                               ? (IDXGISwapChain*) *ppSwapChain
+                                               : (IDXGISwapChain*) realSC;
+                *ppSwapChain = new WrappedIDXGISwapChain4(scToWrap, readDevice, hWnd, localDesc.Flags, false);
 
                 LOG_DEBUG("Created new WrappedIDXGISwapChain4: {0:X}, pDevice: {1:X}", (uintptr_t) *ppSwapChain,
                           (uintptr_t) pDevice);
@@ -903,7 +909,10 @@ HRESULT DxgiFactoryWrappedCalls::CreateSwapChainForCoreWindow(IDXGIFactory2* rea
         State::Instance().screenHeight = static_cast<float>(localDesc.Height);
 
         LOG_DEBUG("Created new swapchain: {0:X}, hWnd: {1:X}", (UINT64) *ppSwapChain, (UINT64) pWindow);
-        *ppSwapChain = new WrappedIDXGISwapChain4(realSC, readDevice, (HWND) pWindow, localDesc.Flags, true);
+        IDXGISwapChain* scToWrap = (State::Instance().activeFgOutput == FGOutput::DLSSG)
+                                       ? (IDXGISwapChain*) *ppSwapChain
+                                       : (IDXGISwapChain*) realSC;
+        *ppSwapChain = new WrappedIDXGISwapChain4(scToWrap, readDevice, (HWND) pWindow, localDesc.Flags, true);
 
         if (!_skipFGSwapChainCreation)
             State::Instance().currentSwapchain = *ppSwapChain;

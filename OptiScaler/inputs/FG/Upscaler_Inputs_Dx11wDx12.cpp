@@ -5,6 +5,8 @@
 
 #include <with_dx12/with_dx12.h>
 #include "shaders/depth_scale/DS_Dx12.h"
+#include <proxies/Streamline_Proxy.h>
+#include <hooks/Reflex_Hooks.h>
 
 using namespace OptiMath;
 static DS_Dx12* DepthScaleDx11wDx12 = nullptr;
@@ -191,6 +193,22 @@ void UpscalerInputsDx11wDx12::UpscaleStart(NVSDK_NGX_Parameter* InParameters, IF
     fg->SetReset(reset);
     fg->SetInterpolationRect(feature->DisplayWidth(), feature->DisplayHeight());
 
+    if (State::Instance().activeFgOutput == FGOutput::DLSSG &&
+        (!ReflexHooks::gameIsSendingMarkers() || !Config::Instance()->FGDLSSGUseGamesReflexMarkers.value_or_default()))
+    {
+        if (StreamlineProxy::PCLSetMarker() != nullptr && StreamlineProxy::GetNewFrameToken() != nullptr)
+        {
+            sl::FrameToken* token = nullptr;
+            const uint32_t frameId = (uint32_t) fg->FrameCount();
+            if (StreamlineProxy::GetNewFrameToken()(token, &frameId) == sl::Result::eOk && token != nullptr)
+            {
+                StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eSimulationStart, *token);
+                StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eSimulationEnd, *token);
+                StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eRenderSubmitStart, *token);
+            }
+        }
+    }
+
     if (State::Instance().isShuttingDown || !fg->IsActive() || !Config::Instance()->FGEnabled.value_or_default() ||
         State::Instance().currentSwapchain == nullptr)
     {
@@ -302,5 +320,21 @@ void UpscalerInputsDx11wDx12::UpscaleEnd(NVSDK_NGX_Parameter* InParameters, IFea
 
     if (fg->IsActive() && Config::Instance()->FGEnabled.value_or_default() &&
         State::Instance().currentSwapchain != nullptr)
+    {
         LOG_DEBUG("(FG Dx11wDx12) running, frame: {}", feature->FrameCount());
+
+        if (State::Instance().activeFgOutput == FGOutput::DLSSG &&
+            (!ReflexHooks::gameIsSendingMarkers() || !Config::Instance()->FGDLSSGUseGamesReflexMarkers.value_or_default()))
+        {
+            if (StreamlineProxy::PCLSetMarker() != nullptr && StreamlineProxy::GetNewFrameToken() != nullptr)
+            {
+                sl::FrameToken* token = nullptr;
+                const uint32_t frameId = (uint32_t) fg->FrameCount();
+                if (StreamlineProxy::GetNewFrameToken()(token, &frameId) == sl::Result::eOk && token != nullptr)
+                {
+                    StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eRenderSubmitEnd, *token);
+                }
+            }
+        }
+    }
 }

@@ -8,9 +8,9 @@ name: Build (No Signing)
 on:
   workflow_dispatch:
   push:
-    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification" ]
+    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification", "feat/optifg-dlssg-native-pre4" ]
   pull_request:
-    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification" ]
+    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification", "feat/optifg-dlssg-native-pre4" ]
     
 env:
   # Path to the solution file relative to the root of the project.
@@ -68,12 +68,14 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        if ($env:GITHUB_REF_NAME -eq 'feat/mfg-turing-ampere') {
+        if ($env:GITHUB_REF_NAME -eq 'feat/optifg-dlssg-native-pre4') {
+            $version = "v10.0.2-pre4"
+        } elseif ($env:GITHUB_REF_NAME -eq 'feat/mfg-turing-ampere') {
             $version = "v10.0.2-pre3"
         } elseif ($env:GITHUB_REF_NAME -eq 'feat/optifg-mfg-unification') {
             $version = "v10.0.1-pre-optifg-test"
         } else {
-            $version = "v10.0.2-pre3"
+            $version = "v10.0.2-pre4"
         }
         
         # Get the current date in a specific format (e.g., YYYYMMDD)

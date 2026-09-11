@@ -1213,7 +1213,12 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
         {
             if (StreamlineProxy::PCLSetMarker() != nullptr && StreamlineProxy::GetNewFrameToken() != nullptr)
             {
-                ((IDXGISwapChain4*) This)->GetCurrentBackBufferIndex();
+                IDXGISwapChain3* sc3 = nullptr;
+                if (This->QueryInterface(IID_PPV_ARGS(&sc3)) == S_OK && sc3 != nullptr)
+                {
+                    sc3->GetCurrentBackBufferIndex();
+                    sc3->Release();
+                }
                 const uint32_t frameId = (uint32_t) fg->FrameCount();
                 tokenResult = StreamlineProxy::GetNewFrameToken()(localToken, &frameId);
 
