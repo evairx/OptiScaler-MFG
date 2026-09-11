@@ -6,7 +6,7 @@
 * Ability to modify DLSS/DLSS-D presets on the fly
 * Supports XeSS v1.3.x's Ultra Performance, NativeAA modes (**Not using default XeSS 1.3.x scaling ratios, rather the old ones**) 
 * An [in-game menu](https://github.com/optiscaler/OptiScaler/blob/master/Config.md) for tuning and saving settings on the fly (Shortcut key is **INSERT**)
-* Optional real NVIDIA DLSS Multi Frame Generation (2x/3x/4x/6x) on supported RTX 40 GPUs and compatible DLSS-G providers
+* Optional, experimental NVIDIA Multi Frame Generation: 2x/3x/4x/5x/6x on RTX 40 (Ada) via in-memory DLSS-G gate patches and kernel retargeting; 2x/3x/4x on RTX 30/20 via a third-party SM86/SM75 CUDA re-host of the DLSS-G model. See [NOTICE.md](NOTICE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 * **RCAS** support with **MAS** (Motion Adaptive Sharpening) for all Dx12 & Dx11 upscalers
 * **Output Scaling** option (0.5x to 3.0x) for backends running on Dx12 & Dx11
 * Supports DXGI spoofing (when running as `dxgi.dll`) as Nvidia GPUs (with XeSS detection to enable XMX on Intel Arc cards)

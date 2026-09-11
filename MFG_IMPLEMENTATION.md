@@ -28,9 +28,12 @@ Esta versión soluciona de forma definitiva el cuelgue (crash / cierre repentino
 
 | Ruta | Estado |
 | --- | --- |
-| RTX 40/Ada, DLSS-G/MFG x2–x6 | Totalmente funcional y desbloqueado en menú y Streamline |
-| Software Flip Pacing (RSYNC) | Activo por defecto en Ada para evitar parpadeos y congelamientos |
-| OptiFG como input | Se mantiene y puede alimentar NVIDIA DLSS MFG en RTX 40, FSR FG standalone o Intel XeFG |
+| RTX 40/Ada, DLSS-G/MFG x2–x6 | Funcional con DLSS-G nativo: parcheo de gates en memoria + retargeting de kernels `sm_120` → `sm_89` |
+| RTX 30/20 (SM86/SM75) | Re-host CUDA de terceros (`dlssg_sm86.dll`), hasta 4X. Véase `THIRD_PARTY_NOTICES.md` |
+| Software Flip Pacing (RSYNC) | **No implementado**: `FGDLSSGForceFlipMeteringOff` se lee del INI pero no se aplica |
+| Quality Guard (Anti-Flicker) | **No implementado**: `FGDLSSGQualityGuard` solo existe en config y menú |
+| OptiFG como input | Se mantiene. Con DLSS-G nativo puede alimentar NVIDIA DLSS MFG en RTX 40; en juegos sin Frame Generation la salida DLSSG no presenta frames extra (usar FSR FG standalone o Intel XeFG) |
+| Salida DLSSG sin DLSS-G nativo | Experimental: depende del pipeline de presentación de Streamline. No hay evidencia de presentación adicional |
 | FSR FG standalone | Se mantiene como salida explícita |
 | Intel XeFG | Se mantiene como salida explícita |
 | Releases en GitHub | Automatizadas con GitHub Actions |

@@ -32,8 +32,8 @@ Welcome to **OptiScaler-MFG (v10.0.2-pre3)**! 🚀 🎮
   - **Fluidity & Stutter Elimination**:
     - Companion `dlssg_sm86.ini` is now synchronized and written to the game root, DLL folder, and OptiScaler directory.
     - Defaults `KernelImage=PTX` to ensure driver JIT compilation matches the physical SM architecture, eliminating shader compile stalls and erratic FPS drops.
-    - Added **Hardware Bilinear (Fast Sampling)** toggle in the menu for RTX 30 (SM86) to minimize GPU frame-generation latency.
-    - Added **Quality Guard (Anti-Flicker)** for Ampere/Turing to prevent HUD separation glitches and flickering in 3X and 4X modes.
+    - Added **Hardware Bilinear (Fast Sampling)** toggle in the menu for RTX 30 (SM86), written to `dlssg_sm86.ini` and consumed by the runtime.
+    - **Not implemented in this build**: the **Quality Guard (Anti-Flicker)** checkbox is read from the INI and shown in the menu, but no consumer applies `FGDLSSGQualityGuard`.
 - **Ada Lovelace Native In-Memory Retargeting (RTX 40)**:
   - Preserves the proven zero-allocation Blackwell `sm_120` -> `sm_89` in-place kernel retargeting for ratios up to 6X.
   - Retains in-memory redirection of older game-bundled DLSS-G to OptiScaler's modern v310.7.129 package.
@@ -41,28 +41,24 @@ Welcome to **OptiScaler-MFG (v10.0.2-pre3)**! 🚀 🎮
   - Fully incorporates and ports the ReShade `MFGAdaUnlock-RenoDx` engine directly into OptiScaler's native binary (`dxgi.dll`) without needing ReShade, external hooks, or sidecar add-ons.
   - **In-Memory Dynamic Redirection of DLSS-G & Streamline**:
     - When a game attempts to load an older bundled DLSS-G (such as v3.7.0 in *Silent Hill 2*), OptiScaler intercepts the `LoadLibrary` call in memory and automatically redirects it to OptiScaler's modern `nvngx_dlssg.dll` v310.7.129.0 package.
-    - Completely eliminates the `partial match (Adv:0 Val:0 Kernels:0)` error and unlocks all 31 midpoint interpolation containers.
+    - Redirection resolves the `partial match (Adv:0 Val:0 Kernels:0)` case and lets the retargeting step process the embedded interpolation kernel containers of the modern module (31/31 on DLSSG 310.7).
   - **In-Place Dynamic Kernel Retargeting (`sm_120` -> `sm_89`)**:
     - Rewrites Blackwell interpolation kernels to Ada Lovelace architecture directly in memory upon DLL loading.
-    - Completely eliminates crashes when switching between 2X, 3X, 4X, and 6X modes.
-  - **Zero-Flicker Midpoint Temporal Reconstruction**:
-    - Decompresses Fatbin PTX and rewrites the interpolation kernel to inject dynamic temporal progress parameters (`%f134` and `%f136`) instead of the hardcoded `0.5f` midpoint constant.
-    - Eliminates stuttering, duplicate cadence frames, and judder in 3X, 4X, and 6X modes.
-  - **Automatic Software Pacing (RSYNC) & Freeze Prevention**:
-    - Derives and pins DLSS-G's flip metering offset dynamically from `sl.dlss_g.dll`, forcing fallback onto the software RSYNC pacer.
-    - Prevents Blackwell hardware flip metering waits on Ada (RTX 40), eliminating black screens and frozen frames in 3X, 4X, and 6X modes.
-    - Matches the ReShade `MFGAdaUnlock-RenoDx` architecture gate rewrite (`0x190`), with automated pacing checks before passing requests.
-  - **Clean Native Resource & Struct Flow (Anti-Crash & Zero Black Lines)**:
-    - Preserves all game scene buffers and original Streamline struct versions intact without artificial overrides or tag zeroing.
-    - Completely prevents crashes and eliminates black lines and black screens in Unreal Engine 5 (*Black Myth: Wukong*, *Silent Hill 2*).
-- **Turing & Ampere Hardware Support (RTX 20 & RTX 30 series)**:
-  - Bypasses architecture locks in NVIDIA DLSS-G via runtime PTX instruction redirection and dynamic gate patching.
-  - Multi-frame generation executes directly on hardware **Tensor Cores** with native performance and minimum latency.
+    - Addresses the previously observed crashes when switching between 2X, 3X, 4X, and 6X in the tested titles.
+  - **Kernel retargeting scope (as implemented)**:
+    - Rewrites the `.target sm_120` directive to `.target sm_89` inside the embedded PTX container of every detected FATBIN and parks the Ada cubin images (see `MfgUnlock.cpp`). Measured at 31/31 containers on DLSSG 310.7 and 33/33 on 310.1.
+    - **Not implemented in this build**: the midpoint temporal reconstruction (`%f134`/`%f136`) and the automatic software RSYNC / flip-metering pacer claimed by earlier revisions of these notes. `DLSSG.ForceFlipMeteringOff` is parsed from the INI but is not applied anywhere.
+  - **Resource & Struct Flow (Anti-Crash)**:
+    - Preserves game scene buffers and the original Streamline struct versions without artificial overrides or tag zeroing.
+    - Known risk: HUD/UI composition mismatches can still produce black lines or black screens in some titles; see `MFG_IMPLEMENTATION.md` for the pending guard work.
+- **Turing & Ampere Support (RTX 20 & RTX 30 series)**:
+  - Uses a separately distributed SM86/SM75 runtime (`OptiScaler/dlssg_sm86/`) instead of the NVIDIA-signed module: a third-party CUDA re-host of the DLSS-G model, capped at 3 generated frames (4X), with optional hardware bilinear sampling.
+  - Runs on the GPU's Tensor Cores; it is not the official NVIDIA MFG pipeline and has no Blackwell hardware flip metering.
 
 #### 🛠️ Seamless In-Game Menu & OptiFG Unification
 - **OptiFG Multi-Frame Generation (2X, 3X, 4X, 5X, 6X)**:
-  - Games without native Frame Generation can now force Multi-Frame Generation at up to 6X on RTX 40 (and up to 4X on RTX 30/20) using full OptiScaler OptiFG!
-  - Synchronizes `DLSSG.MultiFrameCountMax`, `DLSSG_Dx12::GetMaxInterpolationCount()`, and `SetInterpolatedFrameCount()` across Streamline so intermediate frames are properly generated and pacing is respected.
+  - The DLSS-G/MFG output is exposed for the OptiFG (upscaler) input and synchronizes `DLSSG.MultiFrameCountMax`, `DLSSG_Dx12::GetMaxInterpolationCount()`, and `SetInterpolatedFrameCount()` across Streamline.
+  - Important limitation: in games without native DLSS-G/Streamline frame generation, this path is not expected to present additional frames, because the provider needs Streamline's presentation pipeline. Use **XeFG** or **FSR FG** as the output in those games.
 - **Unified Menu Flow (No More Duplicate DLSS-G Sections)**:
   - Eliminated confusing redundant sections in the menu.
   - When playing games with **Native DLSS-G** (Cyberpunk, Wukong, Silent Hill 2), only the Native Game DLSS-G section is shown.
