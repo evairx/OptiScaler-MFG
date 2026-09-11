@@ -456,7 +456,7 @@ bool DLSSG_Dx12::Dispatch()
     options.numBackBuffers = State::Instance().currentSwapchainDesc.BufferCount > 0 ? State::Instance().currentSwapchainDesc.BufferCount : 3;
     options.colorWidth = _width;
     options.colorHeight = _height;
-    options.colorBufferFormat = (uint32_t) State::Instance().currentSwapchainDesc.Format;
+    options.colorBufferFormat = (uint32_t) State::Instance().currentSwapchainDesc.BufferDesc.Format;
 
     if (Config::Instance()->FGDLSSGForceDMFG.value_or_default() && _supportsDMFG)
     {
