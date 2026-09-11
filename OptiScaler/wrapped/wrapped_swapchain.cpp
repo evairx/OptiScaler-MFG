@@ -433,7 +433,7 @@ static HRESULT LocalPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
             // Decouple swapchain presentation from VSync when Frame Generation is active
             SyncInterval = 0;
 
-            if (State::Instance().SCAllowTearing && !State::Instance().realExclusiveFullscreen && (explicitlyForced && !forceVsync))
+            if (State::Instance().SCAllowTearing && !State::Instance().realExclusiveFullscreen && !forceVsync)
             {
                 LOG_DEBUG("Adding DXGI_PRESENT_ALLOW_TEARING");
                 Flags |= DXGI_PRESENT_ALLOW_TEARING;
@@ -551,7 +551,10 @@ WrappedIDXGISwapChain4::WrappedIDXGISwapChain4(IDXGISwapChain* real, IUnknown* p
 
     _real->QueryInterface(IID_PPV_ARGS(&_real2));
     if (_real2 != nullptr)
+    {
+        _real2->SetMaximumFrameLatency(1);
         _real2->Release();
+    }
 
     _real->QueryInterface(IID_PPV_ARGS(&_real3));
     if (_real3 != nullptr)

@@ -360,6 +360,13 @@ void FGHooks::HookFGSwapchain(IDXGISwapChain* pSwapChain)
     if (o_FGSCPresent != nullptr || pSwapChain == nullptr)
         return;
 
+    IDXGISwapChain2* sc2 = nullptr;
+    if (SUCCEEDED(pSwapChain->QueryInterface(IID_PPV_ARGS(&sc2))))
+    {
+        sc2->SetMaximumFrameLatency(1);
+        sc2->Release();
+    }
+
     void** pFactoryVTable = *reinterpret_cast<void***>(pSwapChain);
 
     o_FGRelease = (PFN_Release) pFactoryVTable[2];
@@ -1255,7 +1262,7 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
             // so base render rate is not capped to monitor refresh rate divided by multiplier.
             SyncInterval = 0;
 
-            if (state.SCAllowTearing && !state.realExclusiveFullscreen && (explicitlyForced && !forceVsync))
+            if (state.SCAllowTearing && !state.realExclusiveFullscreen && !forceVsync)
             {
                 LOG_DEBUG("Adding DXGI_PRESENT_ALLOW_TEARING");
                 Flags |= DXGI_PRESENT_ALLOW_TEARING;
