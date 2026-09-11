@@ -1,6 +1,7 @@
 #pragma once
 
 #include <framegen/IFGFeature_Dx12.h>
+#include <DirectXMath.h>
 
 #include <proxies/Streamline_Proxy.h>
 
@@ -13,6 +14,9 @@ class DLSSG_Dx12 : public virtual IFGFeature_Dx12
 
     sl::ViewportHandle viewport { 0 };
     sl::FrameToken* frameToken = nullptr;
+    uint32_t _currentFrameId = 0;
+    DirectX::XMFLOAT4X4 _prevCameraViewToClip {};
+    bool _hasPrevCameraViewToClip = false;
 
     ID3D12Fence* dlssgFence[BUFFER_COUNT] = {};
     UINT64 lastOptionFrame = 0;
@@ -22,6 +26,10 @@ class DLSSG_Dx12 : public virtual IFGFeature_Dx12
   protected:
     void ReleaseObjects() override final;
     void CreateObjects(ID3D12Device* InDevice) override final;
+
+  public:
+    sl::FrameToken* GetCurrentFrameToken() const { return frameToken; }
+    uint32_t GetCurrentFrameId() const { return _currentFrameId; }
 
   public:
     // IFGFeature

@@ -1900,16 +1900,9 @@ void MenuCommon::RenderPerformanceOverlay(RenderMenuContext& ctx)
             if (fg != nullptr && fg->IsActive() && !fg->IsPaused())
             {
                 const double mult = (double) (fg->GetInterpolatedFrameCount() + 1);
-                double totalFps = frameRate;
-                double baseFps = mult > 0.0 ? (frameRate / mult) : frameRate;
-                double displayFrameTime = frameTime;
-
-                if (state.activeFgOutput == FGOutput::DLSSG)
-                {
-                    baseFps = frameRate;
-                    totalFps = frameRate * mult;
-                    displayFrameTime = mult > 0.0 ? (frameTime / mult) : frameTime;
-                }
+                const double totalFps = frameRate;
+                const double baseFps = mult > 0.0 ? (frameRate / mult) : frameRate;
+                const double displayFrameTime = frameTime;
 
                 switch (overlayType)
                 {

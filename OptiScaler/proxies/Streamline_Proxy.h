@@ -396,6 +396,9 @@ class StreamlineProxy
             }
             else
             {
+                if (_slUpgradeInterface != nullptr && device != nullptr)
+                    _slUpgradeInterface((void**) &device);
+
                 auto result = _slSetD3DDevice(device);
                 if (result == sl::Result::eOk)
                 {

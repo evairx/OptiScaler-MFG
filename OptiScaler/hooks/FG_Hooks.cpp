@@ -1209,9 +1209,23 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
 
     if (willPresent && fgFeatureActive && state.activeFgOutput == FGOutput::DLSSG)
     {
+        auto dlssg = dynamic_cast<DLSSG_Dx12*>(fg);
+        if (dlssg != nullptr)
+            localToken = dlssg->GetCurrentFrameToken();
+
+        if (localToken == nullptr && StreamlineProxy::GetNewFrameToken() != nullptr)
+        {
+            const uint32_t frameId = dlssg != nullptr ? dlssg->GetCurrentFrameId() : (uint32_t) fg->FrameCount();
+            tokenResult = StreamlineProxy::GetNewFrameToken()(localToken, &frameId);
+        }
+        else if (localToken != nullptr)
+        {
+            tokenResult = sl::Result::eOk;
+        }
+
         if ((!ReflexHooks::gameIsSendingMarkers() || !config->FGDLSSGUseGamesReflexMarkers.value_or_default()))
         {
-            if (StreamlineProxy::PCLSetMarker() != nullptr && StreamlineProxy::GetNewFrameToken() != nullptr)
+            if (StreamlineProxy::PCLSetMarker() != nullptr && tokenResult == sl::Result::eOk && localToken != nullptr)
             {
                 IDXGISwapChain3* sc3 = nullptr;
                 if (This->QueryInterface(IID_PPV_ARGS(&sc3)) == S_OK && sc3 != nullptr)
@@ -1219,11 +1233,8 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
                     sc3->GetCurrentBackBufferIndex();
                     sc3->Release();
                 }
-                const uint32_t frameId = (uint32_t) fg->FrameCount();
-                tokenResult = StreamlineProxy::GetNewFrameToken()(localToken, &frameId);
 
-                if (tokenResult == sl::Result::eOk && localToken != nullptr)
-                    StreamlineProxy::PCLSetMarker()(sl::PCLMarker::ePresentStart, *localToken);
+                StreamlineProxy::PCLSetMarker()(sl::PCLMarker::ePresentStart, *localToken);
             }
         }
     }

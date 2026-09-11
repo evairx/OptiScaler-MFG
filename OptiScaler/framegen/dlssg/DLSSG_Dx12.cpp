@@ -155,6 +155,9 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
         slFactory->Release();
     }
 
+    if (cmdQueue != nullptr && StreamlineProxy::UpgradeInterface() != nullptr)
+        StreamlineProxy::UpgradeInterface()((void**) &cmdQueue);
+
     StreamlineProxy::SetFeatureLoaded()(sl::kFeatureDLSS_G, true);
 
     desc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
@@ -273,6 +276,9 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
         {
             slFactory->Release();
         }
+
+        if (cmdQueue != nullptr && StreamlineProxy::UpgradeInterface() != nullptr)
+            StreamlineProxy::UpgradeInterface()((void**) &cmdQueue);
 
         IDXGIFactory2* factory2 = nullptr;
         if (factory->QueryInterface(IID_PPV_ARGS(&factory2)) != S_OK)
@@ -568,43 +574,56 @@ bool DLSSG_Dx12::Dispatch()
         constData.cameraUp = { 0.0f, 0.0f, 1.0f };
         constData.cameraRight = { 0.0f, 1.0f, 0.0f };
         constData.cameraFwd = { 1.0f, 0.0f, 0.0f };
-        constData.cameraPinholeOffset = { 0.0f, 0.0f };
-
-        float nearZ = (_cameraNear[fIndex] > 0.0001f && !std::isnan(_cameraNear[fIndex]) && !std::isinf(_cameraNear[fIndex]))
-                          ? _cameraNear[fIndex]
-                          : 0.1f;
-        float farZ = (_cameraFar[fIndex] > nearZ && !std::isnan(_cameraFar[fIndex]) && !std::isinf(_cameraFar[fIndex]))
-                         ? _cameraFar[fIndex]
-                         : (nearZ + 10000.0f);
-        float vfov = (_cameraVFov[fIndex] > 0.01f && _cameraVFov[fIndex] < 3.1415f && !std::isnan(_cameraVFov[fIndex]))
-                         ? _cameraVFov[fIndex]
-                         : DirectX::XMConvertToRadians(60.0f);
-        float aspect = (_cameraAspectRatio[fIndex] > 0.01f && !std::isnan(_cameraAspectRatio[fIndex]))
-                           ? _cameraAspectRatio[fIndex]
-                           : (_width > 0 && _height > 0 ? ((float) _width / (float) _height) : (16.0f / 9.0f));
-
-        XMMATRIX cameraViewToClip = XMMatrixPerspectiveFovRH(vfov, aspect, nearZ, farZ);
-        XMMATRIX clipToCameraView = XMMatrixInverse(nullptr, cameraViewToClip);
-
-        auto prev = XMMatrixIdentity();
-
-        // Convert to sl::float4x4 for Streamline
-        XMFLOAT4X4 temp;
-        XMStoreFloat4x4(&temp, cameraViewToClip);
-        memcpy(&constData.cameraViewToClip, &temp, sizeof(sl::float4x4));
-        XMStoreFloat4x4(&temp, clipToCameraView);
-        memcpy(&constData.clipToCameraView, &temp, sizeof(sl::float4x4));
-
-        XMStoreFloat4x4(&temp, prev);
-        memcpy(&constData.clipToLensClip, &temp, sizeof(sl::float4x4));
-        memcpy(&constData.clipToPrevClip, &temp, sizeof(sl::float4x4));
-        memcpy(&constData.prevClipToClip, &temp, sizeof(sl::float4x4));
-
-        constData.cameraAspectRatio = aspect;
-        constData.cameraFOV = vfov;
-        constData.cameraNear = nearZ;
-        constData.cameraFar = farZ;
     }
+
+    constData.cameraPinholeOffset = { 0.0f, 0.0f };
+
+    float nearZ = (_cameraNear[fIndex] > 0.0001f && !std::isnan(_cameraNear[fIndex]) && !std::isinf(_cameraNear[fIndex]))
+                      ? _cameraNear[fIndex]
+                      : 0.1f;
+    float farZ = (_cameraFar[fIndex] > nearZ && !std::isnan(_cameraFar[fIndex]) && !std::isinf(_cameraFar[fIndex]))
+                     ? _cameraFar[fIndex]
+                     : (nearZ + 10000.0f);
+    float vfov = (_cameraVFov[fIndex] > 0.01f && _cameraVFov[fIndex] < 3.1415f && !std::isnan(_cameraVFov[fIndex]))
+                     ? _cameraVFov[fIndex]
+                     : DirectX::XMConvertToRadians(60.0f);
+    float aspect = (_cameraAspectRatio[fIndex] > 0.01f && !std::isnan(_cameraAspectRatio[fIndex]))
+                       ? _cameraAspectRatio[fIndex]
+                       : (_width > 0 && _height > 0 ? ((float) _width / (float) _height) : (16.0f / 9.0f));
+
+    XMMATRIX cameraViewToClip = XMMatrixPerspectiveFovRH(vfov, aspect, nearZ, farZ);
+    XMMATRIX clipToCameraView = XMMatrixInverse(nullptr, cameraViewToClip);
+
+    XMMATRIX clipToPrevClip = XMMatrixIdentity();
+    if (_hasPrevCameraViewToClip && _reset[fIndex] == 0)
+    {
+        XMMATRIX prevViewToClip = XMLoadFloat4x4(&_prevCameraViewToClip);
+        clipToPrevClip = XMMatrixMultiply(clipToCameraView, prevViewToClip);
+    }
+    XMMATRIX prevClipToClip = XMMatrixInverse(nullptr, clipToPrevClip);
+    XMMATRIX clipToLensClip = XMMatrixIdentity();
+
+    XMStoreFloat4x4(&_prevCameraViewToClip, cameraViewToClip);
+    _hasPrevCameraViewToClip = true;
+
+    // Convert to sl::float4x4 for Streamline
+    XMFLOAT4X4 temp;
+    XMStoreFloat4x4(&temp, cameraViewToClip);
+    memcpy(&constData.cameraViewToClip, &temp, sizeof(sl::float4x4));
+    XMStoreFloat4x4(&temp, clipToCameraView);
+    memcpy(&constData.clipToCameraView, &temp, sizeof(sl::float4x4));
+
+    XMStoreFloat4x4(&temp, clipToLensClip);
+    memcpy(&constData.clipToLensClip, &temp, sizeof(sl::float4x4));
+    XMStoreFloat4x4(&temp, clipToPrevClip);
+    memcpy(&constData.clipToPrevClip, &temp, sizeof(sl::float4x4));
+    XMStoreFloat4x4(&temp, prevClipToClip);
+    memcpy(&constData.prevClipToClip, &temp, sizeof(sl::float4x4));
+
+    constData.cameraAspectRatio = aspect;
+    constData.cameraFOV = vfov;
+    constData.cameraNear = nearZ;
+    constData.cameraFar = farZ;
 
     constData.jitterOffset.x = _jitterX[fIndex];
     constData.jitterOffset.y = _jitterY[fIndex];
@@ -637,7 +656,7 @@ bool DLSSG_Dx12::Dispatch()
     //{
     //     auto fResX = State::Instance().currentFeature->RenderWidth();
     //     auto fResY = State::Instance().currentFeature->RenderHeight();
-
+    //
     //    LOG_DEBUG("Feature LowResMV: {} RenderRes : {}x{}, CMvScale: {}x{}",
     //              State::Instance().currentFeature->LowResMV(), fResX, fResY, 1.0f / (float) fResX,
     //              1.0f / (float) fResY);
@@ -651,7 +670,8 @@ bool DLSSG_Dx12::Dispatch()
     constData.depthInverted = IsInvertedDepth() ? sl::Boolean::eTrue : sl::Boolean::eFalse;
     constData.cameraMotionIncluded = sl::Boolean::eTrue;
     constData.motionVectors3D = sl::Boolean::eFalse;
-    // constData.motionVectorsInvalidValue = 0.0f;
+    constData.motionVectorsInvalidValue = 0.0f;
+    constData.minRelativeLinearDepthObjectSeparation = 40.0f;
     constData.orthographicProjection = sl::Boolean::eFalse;
     constData.motionVectorsDilated = IsLowResMV() ? sl::Boolean::eFalse : sl::Boolean::eTrue;
     constData.motionVectorsJittered = IsJitteredMVs() ? sl::Boolean::eTrue : sl::Boolean::eFalse;
@@ -671,6 +691,19 @@ bool DLSSG_Dx12::Dispatch()
         Deactivate();
 
         return false;
+    }
+
+    _currentFrameId = frameId;
+
+    if (!ReflexHooks::gameIsSendingMarkers() || !Config::Instance()->FGDLSSGUseGamesReflexMarkers.value_or_default())
+    {
+        if (StreamlineProxy::PCLSetMarker() != nullptr && frameToken != nullptr)
+        {
+            StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eSimulationStart, *frameToken);
+            StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eSimulationEnd, *frameToken);
+            StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eRenderSubmitStart, *frameToken);
+            StreamlineProxy::PCLSetMarker()(sl::PCLMarker::eRenderSubmitEnd, *frameToken);
+        }
     }
 
     if (StreamlineProxy::SetConstants() == nullptr)

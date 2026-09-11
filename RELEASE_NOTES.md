@@ -1,24 +1,24 @@
-# OptiScaler-MFG v10.0.2-pre4 (Private Test Build)
+# OptiScaler-MFG v10.0.2-pre5 (Private Test Build)
 
-Welcome to **OptiScaler-MFG (v10.0.2-pre4)**! 🚀 🎮
+Welcome to **OptiScaler-MFG (v10.0.2-pre5)**! 🚀 🎮
 
-### 🆕 What's New in v10.0.2-pre4:
-- **Streamline Swapchain Interception Preservation (Real Hardware Frame Presentation)**:
-  - Fixed critical swapchain wrapping across `DxgiFactory_Hooks.cpp`, `DxgiFactory_WrappedCalls.cpp`, and `D3D11_Hooks.cpp`. Previously, OptiScaler stripped Streamline's proxy swapchain down to the physical hardware swapchain (`realSC`), causing `WrappedIDXGISwapChain4::Present()` to call the GPU swapchain directly and bypass Streamline's `Present()` hook entirely.
-  - When `activeFgOutput == FGOutput::DLSSG`, `WrappedIDXGISwapChain4` now directly wraps Streamline's proxy swapchain (`*ppSwapChain`), ensuring Streamline's `Present()` executes, generating and presenting all interpolated frames to the screen.
-- **Synthetic Reflex Runtime Lifecycle Injection**:
-  - NVIDIA DLSS-G strictly requires Reflex runtime markers during frame rendering. In games without native Reflex (*Running Train*), OptiScaler now injects the full Reflex marker sequence:
-    - `eSimulationStart`, `eSimulationEnd`, and `eRenderSubmitStart` at `UpscaleStart`.
-    - `eRenderSubmitEnd` at `UpscaleEnd`.
-    - `ePresentStart` and `ePresentEnd` at `FGPresent`.
-    - Sets `useMarkersToOptimize = sl::Boolean::eTrue` in `ReflexSetOptions` and actively invokes `GetCurrentBackBufferIndex()`.
-    - Completely eliminates `eFailReflexNotDetectedAtRuntime` and `eFailGetCurrentBackBufferIndexNotCalled`.
-- **Bulletproof Projection Matrix & Motion Vector Sanitation**:
-  - Handled cases where games provide inverted, infinite, or missing camera near/far planes and FOV values, guaranteeing valid perspective projection matrices (`cameraViewToClip` and `clipToCameraView`) and non-zero motion vector scales. Completely eliminates `eFailCommonConstantsInvalid`.
-- **Corrected DLSS-G Overlay Framerate Math**:
-  - Fixed overlay FPS calculation for DLSS-G: since `LocalPresent` is called once per game base frame while Streamline presents interpolated frames internally, `baseFps` is the measured render rate and `totalFps = baseFps * mult` (e.g. 75 base $\to$ 450 total at 6X), fixing the previous visual anomaly where 100 FPS base was displayed as 16 real FPS.
-- **Untouched Fallback Outputs**:
-  - FSR 3.1 FG and Intel XeFG fallbacks remain 100% untouched and fully functional.
+### 🆕 What's New in v10.0.2-pre5:
+- **Unconditional Camera Projection & Clip-Matrix Construction (Fixes `eFailCommonConstantsInvalid`)**:
+  - Resolved a critical scoping bug in `DLSSG_Dx12.cpp` where projection matrix generation (`cameraViewToClip`, `clipToCameraView`, `clipToPrevClip`, `prevClipToClip`, `clipToLensClip`, FOV, and aspect ratio) was trapped inside an `else` branch that only executed when the camera position was exactly `(0, 0, 0)`.
+  - In real 3D gameplay (such as *Running Train* and *Dying Light: The Beast*), camera position was non-zero, causing Streamline's DLSS-G constants to receive all-zero clip matrices. `sl.dlss_g.dll` immediately flagged `eFailCommonConstantsInvalid` (0x8) and dropped all frame interpolation.
+  - Perspective projection and inter-frame clip matrices are now computed unconditionally every frame, maintaining valid historical clip matrices across frames.
+- **Synchronized Frame Tokens & Full Synthetic Reflex Lifecycle**:
+  - Unified frame token acquisition so `DLSSG_Dx12::Dispatch()` and `FGHooks::FGPresent()` share the exact same `sl::FrameToken` instance and token ID.
+  - DLSS-G now emits the complete synthetic Reflex lifecycle (`eSimulationStart`, `eSimulationEnd`, `eRenderSubmitStart`, `eRenderSubmitEnd`) during frame dispatch, followed by `ePresentStart` and `ePresentEnd` around `Present()`.
+  - Eliminates `eFailReflexNotDetectedAtRuntime` and `eFailGetCurrentBackBufferIndexNotCalled`, ensuring Streamline's frame generation scheduler accepts and presents interpolated frames.
+- **Streamline Manual Hooking Interface Upgrades**:
+  - Upgraded D3D12 device and command queue interfaces via `slUpgradeInterface` in `InitWithD3D12`, `CreateSwapchain`, and `CreateSwapchain1`.
+- **Dynamic Runtime Ada MFG Unlock**:
+  - Added dynamic `MfgUnlock::TryApply()` checks during frame dispatch to guarantee that in-memory patching for 6X unlocks occurs as soon as `nvngx_dlssg.dll` is loaded by Streamline, eliminating race conditions with late-loading plugins.
+- **Physical Presentation Measurement in Overlay**:
+  - Reverted synthetic multiplication math in the performance overlay. The overlay now accurately reflects actual presents delivered to DXGI and the display, matching external measurement tools (such as MSI Afterburner).
+- **Preserved Fallbacks**:
+  - FSR 3.1 FG and Intel XeFG fallbacks remain 100% untouched and functional.
 
 ---
 
