@@ -142,8 +142,8 @@ void UpscalerInputsDx12::UpscaleStart(ID3D12GraphicsCommandList* InCmdList, NVSD
     if (!State::Instance().isShuttingDown && fg->IsActive() && Config::Instance()->FGEnabled.value_or_default() &&
         State::Instance().currentSwapchain != nullptr)
     {
-        // Wait for present
-        if (fg->Mutex.getOwner() == 2)
+        // Wait for present (only for synchronous outputs like FSR3/XeFG; DLSSG uses independent ring buffers and per-frame resource locks)
+        if (State::Instance().activeFgOutput != FGOutput::DLSSG && fg->Mutex.getOwner() == 2)
         {
             LOG_TRACE("Waiting for present!");
             fg->Mutex.lock(4);
