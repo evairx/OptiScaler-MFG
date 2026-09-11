@@ -123,7 +123,20 @@ sl::Result StreamlineHooks::hkslInit(const sl::Preferences& pref, uint64_t sdkVe
     if (localPref.engine == sl::EngineType::eUnreal)
         State::Instance().gameQuirks |= GameQuirk::ForceUnrealEngine;
 
-    if (State::Instance().activeFgInput == FGInput::DLSSG || State::Instance().activeFgOutput == FGOutput::DLSSG)
+    if (State::Instance().activeFgOutput == FGOutput::DLSSG)
+    {
+        std::vector<sl::Feature> localFeaturesToLoad(pref.featuresToLoad, pref.featuresToLoad + pref.numFeaturesToLoad);
+        if (std::find(localFeaturesToLoad.begin(), localFeaturesToLoad.end(), sl::kFeatureDLSS_G) == localFeaturesToLoad.end())
+            localFeaturesToLoad.push_back(sl::kFeatureDLSS_G);
+        if (std::find(localFeaturesToLoad.begin(), localFeaturesToLoad.end(), sl::kFeatureReflex) == localFeaturesToLoad.end())
+            localFeaturesToLoad.push_back(sl::kFeatureReflex);
+
+        localPref.featuresToLoad = localFeaturesToLoad.data();
+        localPref.numFeaturesToLoad = localFeaturesToLoad.size();
+
+        return o_slInit(localPref, sdkVersion);
+    }
+    else if (State::Instance().activeFgInput == FGInput::DLSSG)
     {
         std::vector<sl::Feature> localFeaturesToLoad(pref.featuresToLoad, pref.featuresToLoad + pref.numFeaturesToLoad);
         std::erase(localFeaturesToLoad, sl::kFeatureDLSS_G);
@@ -740,7 +753,7 @@ bool StreamlineHooks::hkdlssg_slOnPluginLoad(sl::param::IParameters* params, con
     static std::string config;
 
     bool shouldSpoofArch = Config::Instance()->StreamlineSpoofing.value_or_default() &&
-                           State::Instance().activeFgInput == FGInput::DLSSG;
+                           (State::Instance().activeFgInput == FGInput::DLSSG || State::Instance().activeFgOutput == FGOutput::DLSSG);
 
     uint32_t currentArch = 0;
     if (shouldSpoofArch)
@@ -757,8 +770,8 @@ bool StreamlineHooks::hkdlssg_slOnPluginLoad(sl::param::IParameters* params, con
 
     nlohmann::json configJson = nlohmann::json::parse(*pluginJSON);
 
-    // Kill the DLSSG streamline swapchain hooks
-    if (State::Instance().activeFgInput == FGInput::DLSSG || State::Instance().activeFgOutput == FGOutput::DLSSG)
+    // Kill the DLSSG streamline swapchain hooks only when DLSS-G is NOT the active output
+    if (State::Instance().activeFgInput == FGInput::DLSSG && State::Instance().activeFgOutput != FGOutput::DLSSG)
     {
         if (configJson.contains("/hooks"_json_pointer))
             configJson["hooks"].clear();
@@ -782,7 +795,7 @@ bool StreamlineHooks::hkdlssg_slOnPluginLoad(sl::param::IParameters* params, con
             configJson["external"]["vk"]["device"]["1.3_features"].clear();
     }
 
-    if (State::Instance().activeFgInput == FGInput::DLSSG)
+    if (State::Instance().activeFgInput == FGInput::DLSSG || State::Instance().activeFgOutput == FGOutput::DLSSG)
     {
         if (configJson.contains("/vsync/supported"_json_pointer))
             configJson["vsync"]["supported"] = true; // disable eVSyncOffRequired

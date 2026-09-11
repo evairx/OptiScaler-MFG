@@ -1,13 +1,18 @@
-# OptiScaler-MFG v10.0.2-pre2 (Private Test Build)
+# OptiScaler-MFG v10.0.2-pre3 (Private Test Build)
 
-Welcome to **OptiScaler-MFG (v10.0.2-pre2)**! 🚀 🎮
+Welcome to **OptiScaler-MFG (v10.0.2-pre3)**! 🚀 🎮
 
-### 🆕 What's New in v10.0.2-pre2:
-- **OptiFG DLSS-G Mutex Decoupling**: Fully decoupled DLSS-G from global FG mutexes during upscaler inputs and swapchain presentation. Eliminates render-thread serialization stalls and restores high base render rates in games without native Streamline (such as *The Last of Us Part 1*).
-- **Latency Queue Reduction**: Configured `SetMaximumFrameLatency(1)` on both native and wrapped swapchains, eliminating up to ~50 ms of queued presentation delay.
-- **Tearing Presentation Decoupling**: Automatically grants `DXGI_PRESENT_ALLOW_TEARING` on flip presentation when Frame Generation is active to avoid frame pacing stalls.
-- **In-Game FPS Overlay Math Corrected**: Fixed base FPS calculation so `Total FPS / Base FPS` reflects exact swapchain presentation cadence and true un-interpolated render frequency.
-- **Dying Light: The Beast / Dying Light 2 Crash Fix**: Added `DisableHudfix` quirk to prevent Access Violation crashes when entering 3D gameplay.
+### 🆕 What's New in v10.0.2-pre3:
+- **OptiFG $\to$ Real NVIDIA DLSS-G Hardware MFG Bridge**:
+  - Restored Streamline swapchain hooks (`hooks` and `exclusive_hooks` in `sl.dlss_g.json`) when DLSS-G is the active frame generation output (`activeFgOutput == FGOutput::DLSSG`). Allows `sl.dlss_g.dll` to intercept `IDXGISwapChain::Present` and execute real hardware frame interpolation on NVIDIA Tensor Cores.
+  - Preserves `sl::kFeatureDLSS_G` and `sl::kFeatureReflex` feature loading in OptiFG mode so Streamline properly initializes the NVIDIA DLSS-G interposer and plugin pipeline.
+  - Enables architecture spoofing for DLSS-G output on Ampere and Turing GPUs so RTX 30 and RTX 20 series can run real Tensor Core MFG through OptiFG.
+- **Direct Color/HUDLess Buffer Feeding to DLSS-G**:
+  - Automatically feeds the upscaled output buffer directly as `FG_ResourceType::HudlessColor` with `UntilPresentFromDispatch` validity if HUD fix did not capture a separate buffer, satisfying DLSS-G's color buffer requirements in games like *Running Train*.
+- **DLSS-G Runtime Diagnostic Logging**:
+  - Added real-time status inspection of `slDLSSGGetState` after dispatch, actively logging warnings for any flag failures (`eFailCommonConstantsInvalid`, `eFailReflexNotDetectedAtRuntime`, `eFailGetCurrentBackBufferIndexNotCalled`, etc.).
+- **Fallback Outputs Intact**:
+  - Preserves full fallback support for FSR 3.1 FG and XeFG when user selects them.
 
 ---
 

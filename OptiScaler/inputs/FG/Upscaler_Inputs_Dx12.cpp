@@ -285,5 +285,36 @@ void UpscalerInputsDx12::UpscaleEnd(ID3D12GraphicsCommandList* InCmdList, NVSDK_
         {
             LOG_DEBUG("(FG) running, frame: {0}", feature->FrameCount());
         }
+
+        if (State::Instance().activeFgOutput == FGOutput::DLSSG)
+        {
+            auto fIndex = fg->GetIndex();
+            if (!fg->HasResource(FG_ResourceType::HudlessColor, fIndex))
+            {
+                ID3D12Resource* output = nullptr;
+                if (InParameters->Get(NVSDK_NGX_Parameter_Output, &output) != NVSDK_NGX_Result_Success)
+                    InParameters->Get(NVSDK_NGX_Parameter_Output, (void**) &output);
+
+                if (output != nullptr)
+                {
+                    auto desc = output->GetDesc();
+                    Dx12Resource setResource {};
+                    setResource.type = FG_ResourceType::HudlessColor;
+                    setResource.cmdList = InCmdList;
+                    setResource.resource = output;
+                    setResource.left = 0;
+                    setResource.top = 0;
+                    setResource.width = desc.Width;
+                    setResource.height = desc.Height;
+                    setResource.state = (D3D12_RESOURCE_STATES) Config::Instance()->OutputResourceBarrier.value_or(
+                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                    setResource.validity = FG_ResourceValidity::UntilPresentFromDispatch;
+                    setResource.frameIndex = fIndex;
+
+                    fg->SetResource(&setResource);
+                    LOG_DEBUG("(FG) Tagged upscaler output as HudlessColor for DLSSG frameIndex: {}", fIndex);
+                }
+            }
+        }
     }
 }

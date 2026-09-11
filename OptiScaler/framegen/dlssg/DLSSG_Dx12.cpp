@@ -174,7 +174,8 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
 
     sl::DLSSGState dlssgState {};
     sl::DLSSGOptions dlssgOptions {};
-    if (StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
+    if (StreamlineProxy::DLSSGGetState() != nullptr &&
+        StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
     {
         _maxInterpolationCount = dlssgState.numFramesToGenerateMax;
         if (_maxInterpolationCount < 1)
@@ -294,7 +295,8 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
 
     sl::DLSSGState dlssgState {};
     sl::DLSSGOptions dlssgOptions {};
-    if (StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
+    if (StreamlineProxy::DLSSGGetState() != nullptr &&
+        StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
     {
         _maxInterpolationCount = dlssgState.numFramesToGenerateMax;
         if (_maxInterpolationCount < 1)
@@ -677,6 +679,29 @@ bool DLSSG_Dx12::Dispatch()
         Deactivate();
 
         return false;
+    }
+
+    if (StreamlineProxy::DLSSGGetState() != nullptr)
+    {
+        sl::DLSSGState dlssgCheckState {};
+        sl::DLSSGOptions dlssgCheckOptions {};
+        if (StreamlineProxy::DLSSGGetState()(viewport, dlssgCheckState, &dlssgCheckOptions) == sl::Result::eOk)
+        {
+            if (dlssgCheckState.status != sl::DLSSGStatus::eOk)
+            {
+                LOG_WARN("DLSSG status warning: 0x{:X}", (uint32_t) dlssgCheckState.status);
+                if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailCommonConstantsInvalid))
+                    LOG_WARN("DLSSG: eFailCommonConstantsInvalid flagged");
+                if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailReflexNotDetectedAtRuntime))
+                    LOG_WARN("DLSSG: eFailReflexNotDetectedAtRuntime flagged");
+                if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailGetCurrentBackBufferIndexNotCalled))
+                    LOG_WARN("DLSSG: eFailGetCurrentBackBufferIndexNotCalled flagged");
+                if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailResolutionTooLow))
+                    LOG_WARN("DLSSG: eFailResolutionTooLow flagged");
+                if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailHDRFormatNotSupported))
+                    LOG_WARN("DLSSG: eFailHDRFormatNotSupported flagged");
+            }
+        }
     }
 
     LOG_DEBUG("Result: Ok");
