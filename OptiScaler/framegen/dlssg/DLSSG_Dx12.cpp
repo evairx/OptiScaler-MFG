@@ -531,9 +531,9 @@ bool DLSSG_Dx12::Dispatch()
     if (options.colorBufferFormat == 0)
         options.colorBufferFormat = (uint32_t) DXGI_FORMAT_R8G8B8A8_UNORM;
 
-    if (depthRes != nullptr && depthRes->width > 0 && depthRes->height > 0)
+    if (depthRes.resource != nullptr && depthRes->width > 0 && depthRes->height > 0)
     {
-        options.mvecDepthWidth = depthRes->width;
+        options.mvecDepthWidth = (uint32_t) depthRes->width;
         options.mvecDepthHeight = depthRes->height;
     }
     else
@@ -542,20 +542,20 @@ bool DLSSG_Dx12::Dispatch()
         options.mvecDepthHeight = _height;
     }
 
-    if (depthRes != nullptr && depthRes->resource != nullptr)
-        options.depthBufferFormat = (uint32_t) depthRes->resource->GetDesc().Format;
+    if (depthRes.resource != nullptr && depthRes->GetResource() != nullptr)
+        options.depthBufferFormat = (uint32_t) depthRes->GetResource()->GetDesc().Format;
 
-    if (mvRes != nullptr && mvRes->resource != nullptr)
-        options.mvecBufferFormat = (uint32_t) mvRes->resource->GetDesc().Format;
+    if (mvRes.resource != nullptr && mvRes->GetResource() != nullptr)
+        options.mvecBufferFormat = (uint32_t) mvRes->GetResource()->GetDesc().Format;
 
-    if (hudlessRes != nullptr && hudlessRes->resource != nullptr)
-        options.hudLessBufferFormat = (uint32_t) hudlessRes->resource->GetDesc().Format;
+    if (hudlessRes.resource != nullptr && hudlessRes->GetResource() != nullptr)
+        options.hudLessBufferFormat = (uint32_t) hudlessRes->GetResource()->GetDesc().Format;
 
-    if (uiRes != nullptr && uiRes->resource != nullptr)
-        options.uiBufferFormat = (uint32_t) uiRes->resource->GetDesc().Format;
+    if (uiRes.resource != nullptr && uiRes->GetResource() != nullptr)
+        options.uiBufferFormat = (uint32_t) uiRes->GetResource()->GetDesc().Format;
 
-    if (hudlessRes != nullptr && hudlessRes->resource != nullptr &&
-        uiRes != nullptr && uiRes->resource != nullptr &&
+    if (hudlessRes.resource != nullptr && hudlessRes->GetResource() != nullptr &&
+        uiRes.resource != nullptr && uiRes->GetResource() != nullptr &&
         !Config::Instance()->FGDisableHudless.value_or_default())
     {
         options.enableUserInterfaceRecomposition = sl::Boolean::eTrue;
