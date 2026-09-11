@@ -1,14 +1,15 @@
 <div align="center">
 
-  ![Logo](https://github.com/user-attachments/assets/c7dad5da-0b29-4710-8a57-b58e4e407abd)
+# OptiScaler-MFG
+
+**Unofficial fork of [OptiScaler](https://github.com/optiscaler/OptiScaler) adding an experimental NVIDIA Multi Frame Generation unlock for RTX 20/30/40.**
+
+This fork is **not** affiliated with, endorsed by, or supported by the upstream OptiScaler team,
+cdozdil, or NVIDIA. For the official project, releases, and support, go to
+[optiscaler/OptiScaler](https://github.com/optiscaler/OptiScaler).
 
 </div>
 <hr />
-<br />
-<div align="center">
-  <a href="https://github.com/sponsors/cdozdil?frequency=one-time"><img src="images/gh-sponsor-red.png" /></a>
-  <a href="https://buymeacoffee.com/nitec"><img src="images/bmac.png" /></a>
-</div>
 <br />
 
 ## Table of Contents
@@ -22,18 +23,6 @@
 **7.** [**Wiki**](https://github.com/optiscaler/OptiScaler/wiki)
 
 <br />
-<div align="center">
-  <a href="https://discord.gg/wEyd9w4hG5"><img src="https://img.shields.io/badge/OptiScaler-blue?style=for-the-badge&logo=discord&logoColor=white&logoSize=auto&color=5865F2" alt="Discord invite"></a>
-  <a href="https://github.com/optiscaler/OptiScaler/releases/latest"><img src="https://img.shields.io/badge/Download-Stable-green?style=for-the-badge&logo=github&logoSize=auto" alt="Stable release"></a>
-  <a href="https://github.com/optiscaler/OptiScaler/releases/tag/nightly"><img src="https://img.shields.io/badge/Download-Nightly-purple?style=for-the-badge&logo=github&logoSize=auto" alt="Nightly release"></a>
-  <a href="https://github.com/optiscaler/OptiScaler/wiki"><img src="https://img.shields.io/badge/Documentation-blue?style=for-the-badge&logo=gitbook&logoColor=white&logoSize=auto" alt="Wiki"></a>
-</div>
-<div align="center">
-  <a href="https://github.com/optiscaler/OptiScaler/releases"><img src="https://img.shields.io/github/downloads/optiscaler/optiscaler/total?style=for-the-badge&logo=gitextensions&logoSize=auto&label=Total" alt="Total DL"></a>
-  <a href="https://github.com/optiscaler/OptiScaler/releases/latest"><img src="https://img.shields.io/github/downloads/optiscaler/optiscaler/latest/total?style=for-the-badge&logo=gitextensions&logoSize=auto&label=Stable&color=green&logoColor=white" alt="Stable DL"></a>
-  <a href="https://github.com/optiscaler/OptiScaler/releases/tag/nightly"><img src="https://img.shields.io/github/downloads/optiscaler/OptiScaler/nightly/total?style=for-the-badge&logo=gitextensions&logoColor=white&logoSize=auto&label=Nightly&color=purple" alt="Nightly DL"></a>
-  <a href="https://github.com/optiscaler/OptiScaler/stargazers"><img src="https://img.shields.io/github/stars/optiscaler/optiscaler?style=for-the-badge&logo=githubsponsors&logoColor=white&label=S.T.A.R.S." alt="Stars"></a>
-</div>
 
 
 ## About
@@ -54,7 +43,7 @@
 - Allows users to fine-tune their upscaling experience with a wide range of tweaks and enhancements (RCAS & MAS, Output Scaling, DLSS Presets, Ratio & DRS Overrides etc.)
 - Since v0.7.0+, added ***experimental DX12*** frame generation support with possible HUDfix solution ([**OptiFG**](#optifg--hudfix-experimental-hud-ghosting-fix))
 - Supports [**Fakenvapi**](#installation) integration - enables Reflex hooking and injecting _Anti-Lag 2_ (RDNA1+ only), _LatencyFlex_ (LFX) or _XeLL_ - _bundled since 0.9_  
-- This fork provides optional real NVIDIA DLSS Multi Frame Generation on RTX 40 GPUs when the active DLSS-G provider passes compatibility validation; it never substitutes FSR when validation fails.
+- This fork adds an **optional, experimental NVIDIA Multi Frame Generation unlock**. On RTX 40 (Ada) it patches the DLSS-G frame-count gates in memory and retargets the embedded Blackwell kernels (up to 6X). On RTX 30/20 it sideloads a third-party CUDA SM86/SM75 re-host of the DLSS-G model (up to 4X). It never substitutes FSR when compatibility validation fails.
 - Since v0.7.8, added **ASI plugin loading** support (_disabled_ by default (`LoadAsiPlugins=` in INI), loads from customisable folder, default `plugins`)
 - New project - [**OptiPatcher**](https://github.com/optiscaler/OptiPatcher) - an ASI Plugin for OptiScaler for enabling DLSS and DLSSG inputs without spoofing in ***supported games***.
 - Since v0.7.8, OptiScaler is now automatically applying certain game patches for a better out-of-the-box experience
@@ -84,7 +73,9 @@
 > </details>
 
 
-## Official Discord Server: [OptiScaler](https://discord.gg/wEyd9w4hG5)
+## Upstream community: [OptiScaler Discord](https://discord.gg/wEyd9w4hG5)
+
+*Upstream support channels are not this fork's support channels. Report fork-specific issues in this repository.*
 
 *This project is based on [PotatoOfDoom](https://github.com/PotatoOfDoom)'s excellent [CyberFSR2](https://github.com/PotatoOfDoom/CyberFSR2).*
 
@@ -138,6 +129,9 @@ Currently **OptiScaler** can be used with DirectX 11, DirectX 12 and Vulkan, but
 It's an **experimental** way of adding FG to games without native Frame Generation, or can also be used as a last case scenario if the native FG is not working properly.  
 * Currently supports FSR3-FG (requires HUDfix to avoid HUD ghosting), XeFG and FSR4-FG (ML model deals with the HUD, so may or may not require HUDfix).
 
+> [!NOTE]
+> This fork additionally exposes an experimental **NVIDIA DLSS-G / MFG output**. It relies on Streamline's presentation pipeline and is currently only expected to actually present extra frames in games that already integrate DLSS-G. In games without native frame generation, use **XeFG** or **FSR FG** as the output.
+
 For more information on OptiFG and how to use it, please check the Wiki page - [OptiFG](https://github.com/optiscaler/OptiScaler/wiki/OptiFG).
 
 
@@ -182,13 +176,9 @@ This project uses [FreeType](https://gitlab.freedesktop.org/freetype/freetype) l
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the MFG compatibility attribution and license.
 
-## Sponsors
-<table>
- <tbody>
-  <tr>
-   <td align="center"><img alt="[SignPath]" src="https://avatars.githubusercontent.com/u/34448643" height="30"/></td>
-   <td>Free code signing on Windows provided by <a href="https://signpath.io/">SignPath.io</a>, certificate by <a href="https://signpath.org/">SignPath Foundation</a></td>
-  </tr>
- </tbody>
-</table>
+## License
+Licensed under the **GNU General Public License v3.0**, same as upstream OptiScaler. See [LICENSE](LICENSE).
+
+This is an unofficial fork: modifications are documented by this repository's history and in [NOTICE.md](NOTICE.md). Third-party components (including the GPLv3-derived `dlssg_sm86` runtime and the MIT-licensed MFGAdaUnlock-RenoDx work) are covered in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 

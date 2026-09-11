@@ -1,5 +1,24 @@
 # Third-party notices
 
+## dlssg_sm86 runtime (RTX 20/30 MFG)
+
+The `OptiScaler/dlssg_sm86/dlssg_sm86.dll` runtime distributed with this fork is
+derived from the GPLv3 `dlssg-to-fsr3` / Coldwood1026 SM75/SM86 work. See
+`OptiScaler/dlssg_sm86/THIRD_PARTY_NOTICES.txt` for the upstream references and
+pinned commits.
+
+This fork distributes a binary built from that GPLv3-derived code. Requests for
+the Corresponding Source of the build made by this fork (the native host and
+the modifications applied to it) can be opened at this repository's issue
+tracker:
+
+https://github.com/evairx/OptiScaler-MFG/issues
+
+The runtime embeds model and kernel assets extracted from NVIDIA's
+`nvngx_dlssg.dll` (reference: version 310.1.0.0). Those NVIDIA assets are
+separate third-party material from this user's local installation; they are
+not relicensed by this project or by the GPL.
+
 ## MFGAdaUnlock-RenoDx
 
 The NVIDIA Ada multi-frame-generation compatibility implementation includes
