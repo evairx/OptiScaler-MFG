@@ -67,19 +67,27 @@ bool OS_Dx12::Dispatch(ID3D12GraphicsCommandList* InCmdList, ID3D12Resource* InR
     CreateShaderResourceView(_device, InResource, currentHeap.GetSrvCPU(0));
     CreateUnorderedAccessView(_device, OutResource, currentHeap.GetUavCPU(0), 0);
 
-    FsrEasuCon(fsr1Constants.const0, fsr1Constants.const1, fsr1Constants.const2, fsr1Constants.const3,
-               State::Instance().currentFeature->TargetWidth(), State::Instance().currentFeature->TargetHeight(),
-               State::Instance().currentFeature->TargetWidth(), State::Instance().currentFeature->TargetHeight(),
-               State::Instance().currentFeature->DisplayWidth(), State::Instance().currentFeature->DisplayHeight());
+    // The work is sized by the resources actually passed in. For the usual Output Scaling chain these
+    // match the current feature's target/display sizes; for any other caller only the resources are
+    // the truth.
+    const auto srcDesc = InResource->GetDesc();
+    const auto dstDesc = OutResource->GetDesc();
+    const auto srcW = (uint32_t) srcDesc.Width;
+    const auto srcH = (uint32_t) srcDesc.Height;
+    const auto dstW = (uint32_t) dstDesc.Width;
+    const auto dstH = (uint32_t) dstDesc.Height;
 
-    constants.srcWidth = State::Instance().currentFeature->TargetWidth();
-    constants.srcHeight = State::Instance().currentFeature->TargetHeight();
-    constants.destWidth = State::Instance().currentFeature->DisplayWidth();
-    constants.destHeight = State::Instance().currentFeature->DisplayHeight();
+    FsrEasuCon(fsr1Constants.const0, fsr1Constants.const1, fsr1Constants.const2, fsr1Constants.const3, srcW, srcH,
+               srcW, srcH, dstW, dstH);
+
+    constants.srcWidth = srcW;
+    constants.srcHeight = srcH;
+    constants.destWidth = dstW;
+    constants.destHeight = dstH;
 
     // fsr upscaling
     bool createdConstantsBuffer = false;
-    if (Config::Instance()->OutputScalingDownscaler.value_or_default() == Scaler::FSR1)
+    if (ActiveScaler() == Scaler::FSR1)
     {
         createdConstantsBuffer =
             CreateConstantsBuffer(_device, _constantBuffer, fsr1Constants, currentHeap.GetCbvCPU(0));
@@ -106,17 +114,30 @@ bool OS_Dx12::Dispatch(ID3D12GraphicsCommandList* InCmdList, ID3D12Resource* InR
     UINT dispatchWidth = 0;
     UINT dispatchHeight = 0;
 
-    dispatchWidth =
-        static_cast<UINT>((State::Instance().currentFeature->DisplayWidth() + InNumThreadsX - 1) / InNumThreadsX);
-    dispatchHeight = (State::Instance().currentFeature->DisplayHeight() + InNumThreadsY - 1) / InNumThreadsY;
+    dispatchWidth = (dstW + InNumThreadsX - 1) / InNumThreadsX;
+    dispatchHeight = (dstH + InNumThreadsY - 1) / InNumThreadsY;
 
     InCmdList->Dispatch(dispatchWidth, dispatchHeight, 1);
 
     return true;
 }
 
+// The Output Scaling constructor: no override, so ActiveScaler() reads the global config -- unchanged.
 OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample)
-    : Shader_Dx12(InName, InDevice), _upsample(InUpsample)
+    : OS_Dx12(InName, InDevice, InUpsample, Scaler::Count)
+{
+}
+
+// The override this instance uses instead of the global downscaler config, or the global when it is
+// Scaler::Count. Read in the constructor (pipeline choice) and in Dispatch (FSR1 constants).
+Scaler OS_Dx12::ActiveScaler() const
+{
+    return _scalerOverride != Scaler::Count ? _scalerOverride
+                                            : Config::Instance()->OutputScalingDownscaler.value_or_default();
+}
+
+OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample, Scaler InScalerOverride)
+    : Shader_Dx12(InName, InDevice), _upsample(InUpsample), _scalerOverride(InScalerOverride)
 {
     if (InDevice == nullptr)
     {
@@ -141,7 +162,7 @@ OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample)
     InDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
                                       nullptr, IID_PPV_ARGS(&_constantBuffer));
 
-    auto downscalerConfig = Config::Instance()->OutputScalingDownscaler.value_or_default();
+    auto downscalerConfig = ActiveScaler();
 
     const void* csoData = nullptr;
     size_t csoSize = 0;
