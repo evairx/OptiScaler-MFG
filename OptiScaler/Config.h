@@ -585,9 +585,22 @@ class Config
     CustomOptional<bool> FSRFGEnableWatermark { false };
 
     // XeFG
+    //
+    // A sanity bound, not a capability: it exists only so that a nonsense value
+    // in the ini cannot ask the provider for a million frames per real frame.
+    static constexpr int32_t XeFGMaxInterpolations = 31;
+
     CustomOptional<bool> FGXeFGIgnoreInitChecks { false };
     CustomOptional<int> FGXeFGInterpolationCount { 1 };
-    CustomOptional<bool> FGXeFGUnlockExperimental { false }; // Experimental: allow x5/x6 beyond the runtime-reported maximum
+    CustomOptional<bool> FGXeFGUnlockEnabled { true };
+    // What the unlock patch writes as the provider's reported maximum, and what
+    // the MFG menu offers. The same number is declared to the provider as the
+    // swapchain's maxInterpolatedFrames at init on every launch, so it is not
+    // only a menu bound. Default 5 (6X) is the top of the tested range; the
+    // ini accepts 1..31, but above 6X is untested and the way back is to lower
+    // XeFG\MaxInterpolatedFrames.
+    CustomOptional<int> FGXeFGMaxInterpolatedFrames { 5 };
+    CustomOptional<bool> FGXeFGExtraPacing { true };
     CustomOptional<bool> FGXeFGUIComposition { false };
     CustomOptional<bool> FGXeFGDepthInverted { true };
     CustomOptional<bool> FGXeFGJitteredMV { false };

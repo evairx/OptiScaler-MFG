@@ -4,6 +4,7 @@
 #include "Util.h"
 #include "Config.h"
 #include "Logger.h"
+#include "XeFGUnlock.h"
 
 #include <proxies/Ntdll_Proxy.h>
 #include <proxies/KernelBase_Proxy.h>
@@ -173,6 +174,11 @@ class XeFGProxy
 
         _dll = libxefgModule;
 
+        // Patch the provider in memory before anything calls into it - the MFG
+        // gate is evaluated during swapchain init, so it has to happen here.
+        // A failure just leaves the provider as Intel shipped it.
+        XeFGUnlock::Apply(_dll);
+
         {
             ScopedSkipDxgiLoadChecks skipDxgiLoadChecks {};
 
@@ -253,13 +259,7 @@ class XeFGProxy
             }
         }
 
-        bool loadResult = _xefgSwapChainGetVersion != nullptr && _xefgSwapChainGetProperties != nullptr &&
-                          _xefgSwapChainSetEnabled != nullptr && _xefgSwapChainSetPresentId != nullptr &&
-                          _xefgSwapChainDestroy != nullptr && _xefgSwapChainD3D12CreateContext != nullptr &&
-                          _xefgSwapChainD3D12InitFromSwapChainDesc != nullptr &&
-                          _xefgSwapChainD3D12GetSwapChainPtr != nullptr &&
-                          _xefgSwapChainD3D12TagFrameResource != nullptr &&
-                          _xefgSwapChainTagFrameConstants != nullptr;
+        bool loadResult = _xefgSwapChainGetVersion != nullptr;
         LOG_INFO("LoadResult: {}", loadResult);
         return loadResult;
     }

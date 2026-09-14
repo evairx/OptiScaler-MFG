@@ -103,6 +103,26 @@ jobs:
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
 
+    # NR's runtime (nvngx_dlssnr.dll) is NVIDIA's, ~165 MB, and cannot live in
+    # the repository. Fetch it into external/dlss/ so the PostBuild copy picks
+    # it up, or skip and ship without it. Override the source with the
+    # NVNGX_DLSSNR_URL repository variable.
+    - name: Fetch nvngx_dlssnr.dll (optional)
+      shell: pwsh
+      run: |
+        $url = "${{ vars.NVNGX_DLSSNR_URL }}"
+        if ([string]::IsNullOrWhiteSpace($url)) {
+            $url = "https://github.com/${{ github.repository }}/releases/download/nr-runtime/nvngx_dlssnr.dll"
+        }
+        try {
+            New-Item -ItemType Directory -Force -Path "external/dlss" | Out-Null
+            Invoke-WebRequest -Uri $url -OutFile "external/dlss/nvngx_dlssnr.dll" -UseBasicParsing
+            $hash = (Get-FileHash "external/dlss/nvngx_dlssnr.dll" -Algorithm SHA256).Hash
+            Write-Host "Fetched nvngx_dlssnr.dll ($url), SHA256 $hash"
+        } catch {
+            Write-Warning "nvngx_dlssnr.dll not available ($url); building without the NR runtime."
+        }
+
     - name: Build
       working-directory: ${{env.GITHUB_WORKSPACE}}
       # Add additional options to the MSBuild command line here (like platform or verbosity level).
