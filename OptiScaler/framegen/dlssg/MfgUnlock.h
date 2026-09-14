@@ -45,7 +45,9 @@ struct Status
     bool ModuleFound = false; // nvngx_dlssg.dll was loaded
     bool AdvertiseMatched = false;
     bool ValidateMatched = false;
-    unsigned int KernelsRewritten = 0;
+    unsigned int KernelsRewritten = 0; // Blackwell image retargeted for Ada
+    unsigned int TemporalFixPatches = 0; // descriptor slots redirected to the temporal-corrected kernel
+    std::string TemporalFixDetail;       // why the temporal fallback applied or failed
     std::string SnippetVersion; // file version of nvngx_dlssg.dll, empty if it could not be read
 };
 

@@ -17,22 +17,12 @@
 #include "Hook_Utils.h"
 
 #include "Amdxc64_Hooks.h"
-#include <framegen/dlssg/MfgUnlock.h>
 #pragma intrinsic(_ReturnAddress)
 
-static inline void CheckMfgModuleLoad(HMODULE mod, std::wstring_view path)
+static inline void CheckMfgModuleLoad(HMODULE mod)
 {
-    if (!mod || !MfgUnlock::Pending())
-        return;
-
-    std::wstring lower(path);
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
-    if (lower.find(L"nvngx_dlssg") != std::wstring::npos ||
-        lower.find(L"\\dlssg\\") != std::wstring::npos ||
-        lower.find(L"/dlssg/") != std::wstring::npos)
-    {
-        MfgUnlock::TryApply(mod);
-    }
+    if (StreamlineHooks::registerNativeDlssgModule(mod))
+        LOG_DEBUG("Registered native game's DLSS-G module: {:X}", reinterpret_cast<size_t>(mod));
 }
 
 static inline void NormalizePath(std::string& path)
@@ -354,7 +344,7 @@ HMODULE KernelHooks::hk_K32_LoadLibraryW(LPCWSTR lpLibFileName)
     result = o_K32_LoadLibraryW(lpLibFileName);
     if (result != nullptr && !State::Instance().isShuttingDown)
     {
-        CheckMfgModuleLoad(result, lpLibFileName);
+        CheckMfgModuleLoad(result);
     }
     return result;
 }
@@ -380,7 +370,7 @@ HMODULE KernelHooks::hk_K32_LoadLibraryA(LPCSTR lpLibFileName)
     result = o_K32_LoadLibraryA(lpLibFileName);
     if (result != nullptr && !State::Instance().isShuttingDown)
     {
-        CheckMfgModuleLoad(result, name);
+        CheckMfgModuleLoad(result);
     }
     return result;
 }
@@ -407,7 +397,7 @@ HMODULE KernelHooks::hk_K32_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, 
                                 LOAD_LIBRARY_AS_IMAGE_RESOURCE;
     if (result != nullptr && (dwFlags & kDataOnly) == 0 && !State::Instance().isShuttingDown)
     {
-        CheckMfgModuleLoad(result, lpLibFileName);
+        CheckMfgModuleLoad(result);
     }
     return result;
 }
@@ -435,7 +425,7 @@ HMODULE KernelHooks::hk_K32_LoadLibraryExA(LPCSTR lpLibFileName, HANDLE hFile, D
                                 LOAD_LIBRARY_AS_IMAGE_RESOURCE;
     if (result != nullptr && (dwFlags & kDataOnly) == 0 && !State::Instance().isShuttingDown)
     {
-        CheckMfgModuleLoad(result, name);
+        CheckMfgModuleLoad(result);
     }
     return result;
 }
@@ -462,7 +452,7 @@ HMODULE KernelHooks::hk_KB_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, D
                                 LOAD_LIBRARY_AS_IMAGE_RESOURCE;
     if (result != nullptr && (dwFlags & kDataOnly) == 0 && !State::Instance().isShuttingDown)
     {
-        CheckMfgModuleLoad(result, lpLibFileName);
+        CheckMfgModuleLoad(result);
     }
     return result;
 }

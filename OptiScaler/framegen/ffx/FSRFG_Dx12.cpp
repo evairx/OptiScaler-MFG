@@ -769,7 +769,13 @@ ffxReturnCode_t FSRFG_Dx12::DispatchCallback(ffxDispatchDescFrameGeneration* par
 
 FSRFG_Dx12::~FSRFG_Dx12() { Shutdown(); }
 
-bool FSRFG_Dx12::SetInterpolatedFrameCount(UINT interpolatedFrameCount) { return true; }
+bool FSRFG_Dx12::SetInterpolatedFrameCount(UINT interpolatedFrameCount)
+{
+    if (interpolatedFrameCount != 1)
+        LOG_WARN("FSR FG is fixed at one interpolated frame (2X)");
+
+    return interpolatedFrameCount >= 1;
+}
 
 void* FSRFG_Dx12::FrameGenerationContext()
 {

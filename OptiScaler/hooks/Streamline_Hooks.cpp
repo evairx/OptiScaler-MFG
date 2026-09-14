@@ -14,6 +14,10 @@
 #include <framegen/dlssg/MfgUnlock.h>
 #include <framegen/dlssg/AmpereMfgLoader.h>
 
+#include <filesystem>
+
+#include <windows.h>
+
 #include <json.hpp>
 #include <sl1_reflex.h>
 #include <magic_enum.hpp>
@@ -965,8 +969,100 @@ bool StreamlineHooks::hkcommon_slOnPluginLoad(sl::param::IParameters* params, co
     return result;
 }
 
+static bool IsNativeGameDlssg()
+{
+    const auto& state = State::Instance();
+    if (state.nativeDlssgModule == nullptr || state.nativeDlssgModule == state.optiDLSSG ||
+        state.nativeDlssgModule == state.optiSlDLSSG)
+        return false;
+
+    wchar_t modulePath[MAX_PATH] {};
+    if (GetModuleFileNameW(state.nativeDlssgModule, modulePath, MAX_PATH) == 0)
+        return false;
+
+    std::filesystem::path path(modulePath);
+    std::wstring lower = path.lexically_normal().wstring();
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
+
+    std::filesystem::path mainPath(Config::Instance()->MainDllPath.value());
+    mainPath = mainPath.lexically_normal();
+    std::wstring lowerMain = mainPath.wstring();
+    std::transform(lowerMain.begin(), lowerMain.end(), lowerMain.begin(), ::towlower);
+
+    const auto isSubpath = [](std::wstring_view child, std::wstring_view parent)
+    {
+        if (child.size() <= parent.size() || child.compare(0, parent.size(), parent) != 0)
+            return false;
+
+        const wchar_t separator = child[parent.size()];
+        return separator == L'\\' || separator == L'/';
+    };
+
+    if (isSubpath(lower, lowerMain) || lower.contains(L"\\optiscaler\\") ||
+        lower.contains(L"/optiscaler/") || lower.contains(L"\\streamline\\") ||
+        lower.contains(L"/streamline/") || lower.contains(L"\\dlssg_sm86\\") ||
+        lower.contains(L"/dlssg_sm86/") || lower.ends_with(L"\\dlssg_sm86.dll") ||
+        lower.ends_with(L"/dlssg_sm86.dll"))
+        return false;
+
+    // Only the real DLSS-G provider counts. Model/OTA caches under the NVIDIA driver data
+    // directories are never the game's module, even when their path contains "dlssg".
+    if (lower.contains(L"\\models\\") || lower.contains(L"/models/") || lower.contains(L"\\programdata\\nvidia"))
+        return false;
+
+    return std::filesystem::path(lower).filename().wstring() == L"nvngx_dlssg.dll";
+}
+
+static bool IsNativeDlssgPath(const std::wstring& modulePath)
+{
+    std::wstring lower = std::filesystem::path(modulePath).lexically_normal().wstring();
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
+
+    std::filesystem::path mainPath(Config::Instance()->MainDllPath.value());
+    mainPath = mainPath.lexically_normal();
+    std::wstring lowerMain = mainPath.wstring();
+    std::transform(lowerMain.begin(), lowerMain.end(), lowerMain.begin(), ::towlower);
+
+    const auto isSubpath = [](std::wstring_view child, std::wstring_view parent)
+    {
+        if (child.size() <= parent.size() || child.compare(0, parent.size(), parent) != 0)
+            return false;
+
+        const wchar_t separator = child[parent.size()];
+        return separator == L'\\' || separator == L'/';
+    };
+
+    if (isSubpath(lower, lowerMain) || lower.contains(L"\\optiscaler\\") ||
+        lower.contains(L"/optiscaler/") || lower.contains(L"\\streamline\\") ||
+        lower.contains(L"/streamline/") || lower.contains(L"\\dlssg_sm86\\") ||
+        lower.contains(L"/dlssg_sm86/") || lower.ends_with(L"\\dlssg_sm86.dll") ||
+        lower.ends_with(L"/dlssg_sm86.dll"))
+        return false;
+
+    // Only the real DLSS-G provider counts. Model/OTA caches under the NVIDIA driver data
+    // directories are never the game's module, even when their path contains "dlssg".
+    if (lower.contains(L"\\models\\") || lower.contains(L"/models/") || lower.contains(L"\\programdata\\nvidia"))
+        return false;
+
+    return std::filesystem::path(lower).filename().wstring() == L"nvngx_dlssg.dll";
+}
+
+static bool IsNativeDlssgFlow()
+{
+    const auto& state = State::Instance();
+    // A Streamline input feeding FSRFG/XeFG must not be treated as native NVIDIA MFG.
+    // Native MFG is exposed only while the game owns DLSS-G and OptiScaler has no FG output.
+    const bool usingAutonomousOutput = state.activeFgOutput == FGOutput::FSRFG ||
+                                       state.activeFgOutput == FGOutput::XeFG;
+    return state.activeFgInput == FGInput::DLSSG && !usingAutonomousOutput &&
+           state.activeFgOutput == FGOutput::NoFG && IsNativeGameDlssg();
+}
+
 static uint32_t GetEffectiveDlssgUnlockedMax()
 {
+    if (!IsNativeDlssgFlow())
+        return 1;
+
     if (Config::Instance()->FGDLSSGAdaMfgUnlock.value_or_default() ||
         Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
     {
@@ -975,8 +1071,7 @@ static uint32_t GetEffectiveDlssgUnlockedMax()
     }
 
     if (Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default() ||
-        State::Instance().activeUnlockAmpereMFG ||
-        AmpereMfgLoader::LastStatus().DllLoaded)
+        State::Instance().activeUnlockAmpereMFG || AmpereMfgLoader::LastStatus().DllLoaded)
     {
         int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
         if (ampereMax < 1 || ampereMax > 3)
@@ -987,6 +1082,7 @@ static uint32_t GetEffectiveDlssgUnlockedMax()
     return 1;
 }
 
+
 sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewport, const sl::DLSSGOptions& options)
 {
     lastDlssgViewport = viewport;
@@ -994,7 +1090,6 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 
     // Avoid reading past the game's struct's size
     sl::DLSSGOptions newOptions {};
-    auto newStructVer = newOptions.structVersion;
 
     if (options.structVersion == 1)
         memcpy(&newOptions, &options, 104);
@@ -1055,9 +1150,20 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 
     if (dlssgPotentiallyActive)
     {
-        MfgUnlock::TryApply();
+        if (IsNativeDlssgFlow())
+        {
+            // Latch the active state once the native flow is actually observed, so the menu can
+            // stop asking for a restart after the unlocker has taken effect in this process.
+            State::Instance().activeUnlockAdaMFG =
+                Config::Instance()->FGDLSSGAdaMfgUnlock.value_or(
+                    Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default());
+            State::Instance().activeUnlockAmpereMFG =
+                Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default();
 
-        const bool unlockPending = MfgUnlock::Pending();
+            MfgUnlock::TryApply();
+        }
+
+        const bool unlockPending = IsNativeDlssgFlow() && MfgUnlock::Pending();
 
         // Populate dlssgMfgMax once
         if (!state.dlssgMfgMax.has_value() && !unlockPending)
@@ -1109,7 +1215,19 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport, sl::DLSSGState& state,
                                               const sl::DLSSGOptions* options)
 {
-    MfgUnlock::TryApply();
+    if (o_slDLSSGGetState == nullptr)
+        return sl::Result::eErrorFeatureNotSupported;
+
+    if (IsNativeDlssgFlow())
+    {
+        State::Instance().activeUnlockAdaMFG =
+            Config::Instance()->FGDLSSGAdaMfgUnlock.value_or(
+                Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default());
+        State::Instance().activeUnlockAmpereMFG =
+            Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default();
+
+        MfgUnlock::TryApply();
+    }
 
     sl::Result result {};
 
@@ -1164,7 +1282,7 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
 
     auto& optiState = State::Instance();
 
-    const bool unlockPending = MfgUnlock::Pending();
+    const bool unlockPending = IsNativeDlssgFlow() && MfgUnlock::Pending();
     if (!optiState.dlssgMfgMax.has_value() && !unlockPending)
     {
         sl::DLSSGState localState {};
@@ -2259,20 +2377,30 @@ bool StreamlineHooks::isPclHooked() { return o_pcl_slGetPluginFunction != nullpt
 
 bool StreamlineHooks::isReflexHooked() { return o_reflex_slGetPluginFunction != nullptr; }
 
+bool StreamlineHooks::registerNativeDlssgModule(HMODULE module)
+{
+    if (module == nullptr || module == State::Instance().optiDLSSG || module == State::Instance().optiSlDLSSG)
+        return false;
+
+    wchar_t modulePath[MAX_PATH] {};
+    const DWORD length = GetModuleFileNameW(module, modulePath, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH)
+        return false;
+
+    if (!IsNativeDlssgPath(std::wstring(modulePath, length)))
+        return false;
+
+    auto& nativeModule = State::Instance().nativeDlssgModule;
+    if (nativeModule != nullptr && nativeModule != module)
+        return false;
+
+    nativeModule = module;
+    return true;
+}
+
 bool StreamlineHooks::isNativeDlssgAvailable()
 {
-    if (isDlssgHooked() || o_slDLSSGSetOptions != nullptr)
-        return true;
-
-    if (State::Instance().streamlineVersion.major > 0)
-        return true;
-
-    if (GetModuleHandleW(L"sl.dlss_g.dll") != nullptr ||
-        GetModuleHandleW(L"sl.interposer.dll") != nullptr ||
-        GetModuleHandleW(L"nvngx_dlssg.dll") != nullptr)
-        return true;
-
-    return false;
+    return IsNativeGameDlssg() && (isDlssgHooked() || o_slDLSSGSetOptions != nullptr);
 }
 
 bool StreamlineHooks::isNativeDlssgActive()

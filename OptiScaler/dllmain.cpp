@@ -1752,37 +1752,14 @@ DWORD WINAPI getGpuInfo(LPVOID hModuleVoid)
     if (hModuleVoid)
         IdentifyGpu::updateD3d12Capabilities();
 
-    // Auto-detect and configure appropriate MFG target for Nvidia hardware
+    // Native NVIDIA MFG unlockers stay opt-in. The SM86/SM75 sideload initializes whenever its
+    // config option is enabled on a Turing/Ampere GPU, without waiting for the game to load
+    // DLSS-G first; the per-game native flow decides later whether the patch is applied.
+    State::Instance().activeUnlockAdaMFG = false;
+    State::Instance().activeUnlockAmpereMFG = false;
+
     if (primaryGpu.vendorId == VendorId::Nvidia)
-    {
-        uint32_t arch = static_cast<uint32_t>(primaryGpu.nvidiaArchInfo.architecture_id);
-        bool isAmpere = AmpereMfgLoader::IsAmpereArch(arch) || (primaryGpu.name.find("RTX 30") != std::string::npos);
-        bool isTuring = AmpereMfgLoader::IsTuringArch(arch) || (primaryGpu.name.find("RTX 20") != std::string::npos || primaryGpu.name.find("GTX 16") != std::string::npos);
-        bool isAda = (arch == 0x190) || ((arch & 0xFFF0) == 0x0190) || (primaryGpu.name.find("RTX 40") != std::string::npos);
-
-        if (isAmpere || isTuring)
-        {
-            if (!Config::Instance()->FGDLSSGAmpereMfgUnlock.has_value())
-            {
-                Config::Instance()->FGDLSSGAmpereMfgUnlock.set_volatile_value(true);
-            }
-            Config::Instance()->FGDLSSGAdaMfgUnlock.set_volatile_value(false);
-            Config::Instance()->FGDLSSGUnlockAdaMFG.set_volatile_value(false);
-            State::Instance().activeUnlockAmpereMFG = Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default();
-            State::Instance().activeUnlockAdaMFG = false;
-        }
-        else if (isAda)
-        {
-            Config::Instance()->FGDLSSGAdaMfgUnlock.set_volatile_value(true);
-            Config::Instance()->FGDLSSGUnlockAdaMFG.set_volatile_value(true);
-            Config::Instance()->FGDLSSGAmpereMfgUnlock.set_volatile_value(false);
-            State::Instance().activeUnlockAdaMFG = true;
-            State::Instance().activeUnlockAmpereMFG = false;
-        }
-    }
-
-    // Sideload SM86 / SM75 MFG outside DllMain
-    AmpereMfgLoader::TrySetup();
+        AmpereMfgLoader::TrySetup();
 
     return 0;
 }
@@ -1895,10 +1872,20 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         if (State::Instance().activeFgInput == FGInput::NoFG)
             State::Instance().activeFgOutput = FGOutput::NoFG;
 
-        // Initialize Ada and Ampere MFG unlock from config
-        State::Instance().activeUnlockAdaMFG = Config::Instance()->FGDLSSGAdaMfgUnlock.value_or(
-            Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default());
-        State::Instance().activeUnlockAmpereMFG = Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default();
+        // Initialize native-game MFG unlockers only after native DLSS-G was identified.
+        if (StreamlineHooks::isNativeDlssgAvailable() &&
+            State::Instance().activeFgInput == FGInput::DLSSG &&
+            State::Instance().activeFgOutput == FGOutput::NoFG)
+        {
+            State::Instance().activeUnlockAdaMFG = Config::Instance()->FGDLSSGAdaMfgUnlock.value_or(
+                Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default());
+            State::Instance().activeUnlockAmpereMFG = Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default();
+        }
+        else
+        {
+            State::Instance().activeUnlockAdaMFG = false;
+            State::Instance().activeUnlockAmpereMFG = false;
+        }
 
         // Init Kernel proxies
         NtdllProxy::Init();

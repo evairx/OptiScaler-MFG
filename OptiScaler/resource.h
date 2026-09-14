@@ -29,15 +29,15 @@
 #define VER_MAJOR_VERSION 10
 #define VER_MINOR_VERSION 0
 #define VER_HOTFIX_VERSION 2
-#define VER_BUILD_NUMBER 3
+#define VER_BUILD_NUMBER 4
 
 #define VER_FILE_VERSION VER_MAJOR_VERSION, VER_MINOR_VERSION, VER_HOTFIX_VERSION, VER_BUILD_NUMBER
 #define VER_FILE_VERSION_STR                                                                                           \
     STRINGIZE(VER_MAJOR_VERSION) "." STRINGIZE(VER_MINOR_VERSION) "." STRINGIZE(VER_HOTFIX_VERSION) "." STRINGIZE(VER_BUILD_NUMBER)
-#define OPTI_VERSION "10.0.2-pre3"
+#define OPTI_VERSION "evairx/optiscaler_dev-1 (no tested)"
 
 #define VER_PRODUCT_VERSION VER_FILE_VERSION
 
-#define VER_PRODUCT_VERSION_STR "10.0.2-pre3"
+#define VER_PRODUCT_VERSION_STR "evairx/optiscaler_dev-1 (no tested)"
 
-#define VER_PRODUCT_NAME "OptiScaler v" VER_PRODUCT_VERSION_STR
+#define VER_PRODUCT_NAME "OptiScaler-MFG " VER_PRODUCT_VERSION_STR

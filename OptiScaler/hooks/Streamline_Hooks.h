@@ -142,6 +142,20 @@ class StreamlineHooks
     static void updateDlssgOptions();
     inline static bool isOptiScalerSettingDLSSGOptions = false;
 
+    class ScopedOptiScalerDLSSGOptions
+    {
+      private:
+        bool previousState;
+
+      public:
+        ScopedOptiScalerDLSSGOptions() : previousState(isOptiScalerSettingDLSSGOptions)
+        {
+            isOptiScalerSettingDLSSGOptions = true;
+        }
+
+        ~ScopedOptiScalerDLSSGOptions() { isOptiScalerSettingDLSSGOptions = previousState; }
+    };
+
     static void unhookInterposer();
     static void hookInterposer(HMODULE slInterposer);
 
@@ -172,6 +186,7 @@ class StreamlineHooks
     static bool isReflexHooked();
     static bool isNativeDlssgAvailable();
     static bool isNativeDlssgActive();
+    static bool registerNativeDlssgModule(HMODULE module);
 
   private:
     inline static sl::RenderAPI renderApi = sl::RenderAPI::eCount;

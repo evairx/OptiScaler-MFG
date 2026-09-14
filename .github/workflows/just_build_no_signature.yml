@@ -8,9 +8,9 @@ name: Build (No Signing)
 on:
   workflow_dispatch:
   push:
-    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification" ]
+    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification", "optiscaler_dev1" ]
   pull_request:
-    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification" ]
+    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification", "optiscaler_dev1" ]
     
 env:
   # Path to the solution file relative to the root of the project.
@@ -70,10 +70,16 @@ jobs:
         # Merge into a single version string
         if ($env:GITHUB_REF_NAME -eq 'feat/mfg-turing-ampere') {
             $version = "v10.0.2-pre3"
+            $releaseName = "OptiScaler-MFG v10.0.2-pre3"
         } elseif ($env:GITHUB_REF_NAME -eq 'feat/optifg-mfg-unification') {
             $version = "v10.0.1-pre-optifg-test"
+            $releaseName = "OptiScaler-MFG v10.0.1-pre-optifg-test"
+        } elseif ($env:GITHUB_REF_NAME -eq 'optiscaler_dev1') {
+            $version = "v10.0.2-dev1-notested"
+            $releaseName = "OptiScaler-MFG evairx/optiscaler_dev-1 (no tested)"
         } else {
             $version = "v10.0.2-pre3"
+            $releaseName = "OptiScaler-MFG v10.0.2-pre3"
         }
         
         # Get the current date in a specific format (e.g., YYYYMMDD)
@@ -88,6 +94,7 @@ jobs:
         # Write outputs to GITHUB_OUTPUT
         "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         "filename=$outputFileName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        "release_name=$releaseName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         
       continue-on-error: false
       
@@ -124,9 +131,9 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.get_version.outputs.version }}
-        name: OptiScaler-MFG ${{ steps.get_version.outputs.version }}
+        name: ${{ steps.get_version.outputs.release_name }}
         body_path: RELEASE_NOTES.md
-        draft: true
+        draft: ${{ github.ref_name != 'optiscaler_dev1' }}
         prerelease: true
         files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
       env:

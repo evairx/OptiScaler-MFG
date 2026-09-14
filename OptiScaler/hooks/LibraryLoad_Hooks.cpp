@@ -32,7 +32,6 @@
 #include <fsr4/FSR4Upgrade.h>
 #include <misc/IdentifyGpu.h>
 #include <low_latency/input/input_uell.h>
-#include <framegen/dlssg/MfgUnlock.h>
 
 // #define LOG_LIB_OPERATIONS
 
@@ -135,8 +134,9 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
 
             if (normalizedPath.contains(L"\\dlssg\\") || normalizedPath.contains(L"/dlssg/"))
             {
-                if (MfgUnlock::Pending())
-                    MfgUnlock::TryApply(loadedBin);
+                // OTA model binaries are not the native nvngx_dlssg module and must never be
+                // selected as the target of the in-memory MFG patcher.
+                LOG_TRACE("Loaded DLSS-G OTA model: {}", wstring_to_string(lpLibFullPath));
             }
         }
         return loadedBin;
@@ -164,17 +164,17 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
             }
         }
 
+        const bool redirectedToOpti = targetPath != lpLibFullPath;
         auto dlssgModule = NtdllProxy::LoadLibraryExW_Ldr(targetPath.c_str(), NULL, 0);
-        if (dlssgModule == nullptr && targetPath != lpLibFullPath)
+        if (dlssgModule == nullptr && redirectedToOpti)
         {
             LOG_WARN(L"Failed loading OptiScaler DLSS-G from {}, falling back to original {}", targetPath, lpLibFullPath);
             dlssgModule = NtdllProxy::LoadLibraryExW_Ldr(lpLibFullPath, NULL, 0);
         }
 
-        if (dlssgModule != nullptr && MfgUnlock::Pending())
-        {
-            MfgUnlock::TryApply(dlssgModule);
-        }
+        if (!redirectedToOpti && dlssgModule != nullptr)
+            StreamlineHooks::registerNativeDlssgModule(dlssgModule);
+
         return dlssgModule;
     }
 

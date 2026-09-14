@@ -1,7 +1,6 @@
 #include "pch.h"
 
 #include "DLSSG_Dx12.h"
-#include "MfgUnlock.h"
 
 #include <hudfix/Hudfix_Dx12.h>
 #include <menu/menu_overlay_dx.h>
@@ -18,33 +17,6 @@
 
 using namespace DirectX;
 
-namespace {
-
-void UpdateVerifiedMfgCapabilities(int& maxInterpolationCount)
-{
-    if (Config::Instance()->FGDLSSGAdaMfgUnlock.value_or_default() ||
-        Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-    {
-        MfgUnlock::TryApply();
-        auto unlocked = MfgUnlock::UnlockedMax();
-        maxInterpolationCount = std::max(maxInterpolationCount, unlocked > 0 ? static_cast<int>(unlocked) : 5);
-        return;
-    }
-
-    if (Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default())
-    {
-        int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
-        if (ampereMax < 1 || ampereMax > 3)
-            ampereMax = 3;
-        maxInterpolationCount = std::max(maxInterpolationCount, ampereMax);
-        return;
-    }
-
-    maxInterpolationCount = std::max(maxInterpolationCount, 1);
-}
-
-} // namespace
-
 feature_version DLSSG_Dx12::Version()
 {
     if (StreamlineProxy::LoadStreamline())
@@ -60,23 +32,8 @@ HWND DLSSG_Dx12::Hwnd() { return _hwnd; }
 
 int DLSSG_Dx12::GetMaxInterpolationCount() const
 {
-    if (Config::Instance()->FGDLSSGAdaMfgUnlock.value_or_default() ||
-        Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
-    {
-        auto unlocked = MfgUnlock::UnlockedMax();
-        return unlocked > 0 ? static_cast<int>(unlocked) : 5;
-    }
-
-    if (Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default())
-    {
-        int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
-        if (ampereMax < 1 || ampereMax > 3)
-            ampereMax = 3;
-        return ampereMax;
-    }
-
-    if (_maxInterpolationCount > 1)
-        return _maxInterpolationCount;
+    // OptiFG owns this Streamline instance and is intentionally limited to one
+    // generated frame. Native Streamline MFG is handled by Streamline hooks.
     return 1;
 }
 
@@ -88,6 +45,9 @@ bool DLSSG_Dx12::GetDMFGSupport() const
 bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQueue, DXGI_SWAP_CHAIN_DESC* desc,
                                  IDXGISwapChain** swapChain, bool readyToRelease)
 {
+    if (!factory || !cmdQueue || !desc || !swapChain || *swapChain != nullptr)
+        return false;
+
     if (State::Instance().currentFGSwapchain != nullptr && _hwnd == desc->OutputWindow)
     {
         if (Config::Instance()->FGPreserveSwapChain.value_or_default())
@@ -147,7 +107,9 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
     IDXGIFactory* slFactory = nullptr;
     if (!Util::CheckForRealObject(__FUNCTION__, factory, (IUnknown**) &slFactory))
     {
-        StreamlineProxy::UpgradeInterface()((void**) &factory);
+        auto upgradeInterface = StreamlineProxy::UpgradeInterface();
+        if (upgradeInterface == nullptr || upgradeInterface((void**) &factory) != sl::Result::eOk || factory == nullptr)
+            return false;
         DxgiFactoryHooks::HookToDLSSGFactory(factory);
     }
     else
@@ -155,6 +117,8 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
         slFactory->Release();
     }
 
+    if (StreamlineProxy::SetFeatureLoaded() == nullptr)
+        return false;
     StreamlineProxy::SetFeatureLoaded()(sl::kFeatureDLSS_G, true);
 
     desc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
@@ -181,8 +145,6 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
         if (_maxInterpolationCount < 1)
             _maxInterpolationCount = 1;
 
-        UpdateVerifiedMfgCapabilities(_maxInterpolationCount);
-
         LOG_INFO("Max supported interpolations: {}", _maxInterpolationCount);
 
         if (!_supportsDMFG)
@@ -191,7 +153,6 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
     else
     {
         _maxInterpolationCount = 1;
-        UpdateVerifiedMfgCapabilities(_maxInterpolationCount);
     }
 
     _gameCommandQueue = cmdQueue;
@@ -205,6 +166,9 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
                                   DXGI_SWAP_CHAIN_DESC1* desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullscreenDesc,
                                   IDXGISwapChain1** swapChain, bool readyToRelease)
 {
+    if (!factory || !cmdQueue || !desc || !swapChain || *swapChain != nullptr)
+        return false;
+
     if (State::Instance().currentFGSwapchain != nullptr && _hwnd == hwnd)
     {
         if (Config::Instance()->FGPreserveSwapChain.value_or_default())
@@ -302,8 +266,6 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
         if (_maxInterpolationCount < 1)
             _maxInterpolationCount = 1;
 
-        UpdateVerifiedMfgCapabilities(_maxInterpolationCount);
-
         LOG_INFO("Max supported interpolations: {}", _maxInterpolationCount);
 
         if (!_supportsDMFG)
@@ -312,7 +274,6 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
     else
     {
         _maxInterpolationCount = 1;
-        UpdateVerifiedMfgCapabilities(_maxInterpolationCount);
     }
 
     _gameCommandQueue = cmdQueue;
@@ -364,9 +325,8 @@ void DLSSG_Dx12::Deactivate()
         options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
         if (StreamlineProxy::DLSSGSetOptions() != nullptr)
         {
-            StreamlineHooks::isOptiScalerSettingDLSSGOptions = true;
+            StreamlineHooks::ScopedOptiScalerDLSSGOptions guard {};
             StreamlineProxy::DLSSGSetOptions()(viewport, options);
-            StreamlineHooks::isOptiScalerSettingDLSSGOptions = false;
         }
 
         if (StreamlineProxy::ReflexSetOptions() != nullptr)
@@ -424,24 +384,8 @@ bool DLSSG_Dx12::Dispatch()
 
     auto& state = State::Instance();
 
-    UpdateVerifiedMfgCapabilities(_maxInterpolationCount);
-
-    int targetCount = 1;
-    if (Config::Instance()->FGDLSSGOverrideInterpolationCount.has_value() &&
-        Config::Instance()->FGDLSSGOverrideInterpolationCount.value() > 0)
-    {
-        targetCount = Config::Instance()->FGDLSSGOverrideInterpolationCount.value();
-    }
-    else if (Config::Instance()->FGDLSSGInterpolationCount.has_value())
-    {
-        targetCount = Config::Instance()->FGDLSSGInterpolationCount.value();
-    }
-
-    const int maxCount = GetMaxInterpolationCount();
-    if (targetCount > maxCount)
-        targetCount = maxCount;
-    if (targetCount < 1)
-        targetCount = 1;
+    // OptiFG owns this Streamline instance and is always one generated frame.
+    constexpr int targetCount = 1;
 
     if (_framesToInterpolate != targetCount)
     {
@@ -466,9 +410,8 @@ bool DLSSG_Dx12::Dispatch()
 
     if (StreamlineProxy::DLSSGSetOptions() != nullptr)
     {
-        StreamlineHooks::isOptiScalerSettingDLSSGOptions = true;
+        StreamlineHooks::ScopedOptiScalerDLSSGOptions guard {};
         auto dlssgSetOptionsResult = StreamlineProxy::DLSSGSetOptions()(viewport, options);
-        StreamlineHooks::isOptiScalerSettingDLSSGOptions = false;
 
         if (dlssgSetOptionsResult != sl::Result::eOk && _framesToInterpolate > 1)
         {

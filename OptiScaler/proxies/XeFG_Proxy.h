@@ -253,7 +253,13 @@ class XeFGProxy
             }
         }
 
-        bool loadResult = _xefgSwapChainGetVersion != nullptr;
+        bool loadResult = _xefgSwapChainGetVersion != nullptr && _xefgSwapChainGetProperties != nullptr &&
+                          _xefgSwapChainSetEnabled != nullptr && _xefgSwapChainSetPresentId != nullptr &&
+                          _xefgSwapChainDestroy != nullptr && _xefgSwapChainD3D12CreateContext != nullptr &&
+                          _xefgSwapChainD3D12InitFromSwapChainDesc != nullptr &&
+                          _xefgSwapChainD3D12GetSwapChainPtr != nullptr &&
+                          _xefgSwapChainD3D12TagFrameResource != nullptr &&
+                          _xefgSwapChainTagFrameConstants != nullptr;
         LOG_INFO("LoadResult: {}", loadResult);
         return loadResult;
     }

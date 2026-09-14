@@ -13,7 +13,6 @@
 #include <sl_pcl.h>
 #include <sl_dlss_g.h>
 #include <sl_reflex.h>
-#include <framegen/dlssg/MfgUnlock.h>
 
 #pragma comment(lib, "Version.lib")
 
@@ -111,9 +110,6 @@ class StreamlineProxy
             }
 
             State::Instance().optiDLSSG = NtdllProxy::LoadLibraryExW_Ldr(dlssgPath.c_str(), NULL, NULL);
-
-            if (State::Instance().optiDLSSG != nullptr)
-                MfgUnlock::TryApply(State::Instance().optiDLSSG);
 
             return HookStreamline(_dll);
         }

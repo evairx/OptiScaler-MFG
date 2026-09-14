@@ -201,6 +201,7 @@ class State
     HMODULE optiSlReflex = nullptr;
     HMODULE optiSlPCL = nullptr;
     HMODULE optiDLSSG = nullptr;
+    HMODULE nativeDlssgModule = nullptr; // Native game's nvngx_dlssg.dll; never an OptiScaler module
 
     // NGX OTA
     std::string NGX_OTA_Dlss;

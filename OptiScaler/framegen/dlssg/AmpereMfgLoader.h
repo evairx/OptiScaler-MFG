@@ -12,6 +12,10 @@ struct Status
     bool DllFound = false;    // dlssg_sm86.dll found in OptiScaler/dlssg_sm86/
     bool IniWritten = false;  // dlssg_sm86.ini generated and written
     bool DllLoaded = false;   // LoadLibrary succeeded
+    bool ExperimentalRequested = false; // 5X/6X asked for in the config
+    bool ExperimentalPatched = false;   // hash-pinned loader patched and loaded
+    bool ExperimentalFallback = false;  // 5X/6X unavailable; proven 4X path kept
+    std::string ExperimentalDetail;     // why the experimental patch applied or failed
     std::string ErrorMessage; // Human-readable error if anything failed
 };
 
@@ -26,8 +30,9 @@ void WriteIniFiles();
 /// Formats dlssg_sm86.ini content with Native 0.2.4 specification and strict clamping.
 inline std::string FormatIniContent(int maxFrames, const std::string& kernelImg, int hwBilinear = 0, const std::string& router = "SM86", int logLevel = 1)
 {
-    // Native 0.2.4 strictly requires: MaxGeneratedFrames must be 1, 2 or 3
-    if (maxFrames <= 0 || maxFrames > 3)
+    // Native 0.2.4 accepts 1, 2 or 3. The experimental 5X/6X loaders are hash-pinned builds
+    // whose parser bound was raised, so 4 and 5 are written only for those patched copies.
+    if (maxFrames <= 0 || maxFrames > 5)
         maxFrames = 3;
 
     std::string validKernel = kernelImg;
