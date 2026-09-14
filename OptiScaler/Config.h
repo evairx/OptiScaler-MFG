@@ -587,6 +587,7 @@ class Config
     // XeFG
     CustomOptional<bool> FGXeFGIgnoreInitChecks { false };
     CustomOptional<int> FGXeFGInterpolationCount { 1 };
+    CustomOptional<bool> FGXeFGUnlockExperimental { false }; // Experimental: allow x5/x6 beyond the runtime-reported maximum
     CustomOptional<bool> FGXeFGUIComposition { false };
     CustomOptional<bool> FGXeFGDepthInverted { true };
     CustomOptional<bool> FGXeFGJitteredMV { false };

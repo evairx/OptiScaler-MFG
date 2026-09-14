@@ -191,6 +191,8 @@ bool Config::Reload(std::filesystem::path iniPath)
                 (FGXeFGInterpolationCount.value() < 1 || FGXeFGInterpolationCount.value() > 5))
                 FGXeFGInterpolationCount.reset();
 
+            FGXeFGUnlockExperimental.set_from_config(readBool("XeFG", "UnlockExperimental"));
+
             FGXeFGIgnoreInitChecks.set_from_config(readBool("XeFG", "IgnoreInitChecks"));
             FGXeFGUIComposition.set_from_config(readBool("XeFG", "UIComposition"));
             FGXeFGDepthInverted.set_from_config(readBool("XeFG", "DepthInverted"));
@@ -968,6 +970,8 @@ bool Config::SaveIni()
         ini.SetValue("XeFG", "DebugView", GetBoolValue(Instance()->FGXeFGDebugView.value_for_config()).c_str());
         ini.SetValue("XeFG", "ForceBorderless",
                      GetBoolValue(Instance()->FGXeFGForceBorderless.value_for_config()).c_str());
+        ini.SetValue("XeFG", "UnlockExperimental",
+                     GetBoolValue(Instance()->FGXeFGUnlockExperimental.value_for_config()).c_str());
     }
 
     {

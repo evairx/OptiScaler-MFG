@@ -4180,6 +4180,16 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
                        "Fixes artifacting transparent HUD/UI");
         ImGui::EndDisabled();
 
+        bool xeFGUnlockExperimental = config->FGXeFGUnlockExperimental.value_or_default();
+        if (ImGui::Checkbox("Experimental XeFG unlock (5X/6X)", &xeFGUnlockExperimental))
+        {
+            config->FGXeFGUnlockExperimental = xeFGUnlockExperimental;
+            state.fgChanged = true;
+        }
+        ShowHelpMarker("Allows 5X/6X even when libxess_fg reports a lower maximum.\n\n"
+                       "Unverified on GPU. V-Sync is strongly recommended above 4X.\n"
+                       "If the runtime rejects the count, the last accepted value is kept.");
+
         bool fgDV = config->FGXeFGDebugView.value_or_default();
         if (ImGui::Checkbox("Debug View##2", &fgDV))
         {

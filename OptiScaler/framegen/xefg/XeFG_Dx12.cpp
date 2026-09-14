@@ -342,7 +342,20 @@ bool XeFG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQu
         auto result = XeFGProxy::GetProperties()(_swapChainContext, &props);
         if (result == XEFG_SWAPCHAIN_RESULT_SUCCESS && props.maxSupportedInterpolations > 0)
         {
+            _runtimeMaxInterpolations = props.maxSupportedInterpolations;
             _maxInterpolationCount = std::min<int>(kMaxXeFGInterpolatedFrames, props.maxSupportedInterpolations);
+
+            // Experimental unlock: allow the menu to request x5/x6 even when the runtime reports a
+            // lower maximum. Creation still uses the runtime's own limit; the dynamic setter tries
+            // the unlocked value and the last accepted count is kept if the runtime refuses.
+            if (Config::Instance()->FGXeFGUnlockExperimental.value_or_default() &&
+                _maxInterpolationCount < kMaxXeFGInterpolatedFrames)
+            {
+                LOG_WARN("XeFG experimental unlock: interpolation limit {} -> {} (runtime reported {})",
+                         _maxInterpolationCount, kMaxXeFGInterpolatedFrames, props.maxSupportedInterpolations);
+                _maxInterpolationCount = kMaxXeFGInterpolatedFrames;
+            }
+
             LOG_INFO("Max supported interpolations: {}", props.maxSupportedInterpolations);
         }
         else if (result == XEFG_SWAPCHAIN_RESULT_SUCCESS)
@@ -410,7 +423,9 @@ bool XeFG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQu
 
     xefg_swapchain_d3d12_init_params_t params {};
 
-    int intTarget = _maxInterpolationCount;
+    // Creation never exceeds what the runtime itself reported; unlocked values are applied through
+    // the dynamic setter once the swapchain is alive.
+    int intTarget = std::min(_maxInterpolationCount, _runtimeMaxInterpolations);
 
     // Older runtimes use the creation limit; newer runtimes can change it dynamically.
     if (XeFGProxy::SetNumInterpolatedFrames() == nullptr)
@@ -553,7 +568,20 @@ bool XeFG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
         auto result = XeFGProxy::GetProperties()(_swapChainContext, &props);
         if (result == XEFG_SWAPCHAIN_RESULT_SUCCESS && props.maxSupportedInterpolations > 0)
         {
+            _runtimeMaxInterpolations = props.maxSupportedInterpolations;
             _maxInterpolationCount = std::min<int>(kMaxXeFGInterpolatedFrames, props.maxSupportedInterpolations);
+
+            // Experimental unlock: allow the menu to request x5/x6 even when the runtime reports a
+            // lower maximum. Creation still uses the runtime's own limit; the dynamic setter tries
+            // the unlocked value and the last accepted count is kept if the runtime refuses.
+            if (Config::Instance()->FGXeFGUnlockExperimental.value_or_default() &&
+                _maxInterpolationCount < kMaxXeFGInterpolatedFrames)
+            {
+                LOG_WARN("XeFG experimental unlock: interpolation limit {} -> {} (runtime reported {})",
+                         _maxInterpolationCount, kMaxXeFGInterpolatedFrames, props.maxSupportedInterpolations);
+                _maxInterpolationCount = kMaxXeFGInterpolatedFrames;
+            }
+
             LOG_INFO("Max supported interpolations: {}", props.maxSupportedInterpolations);
         }
         else if (result == XEFG_SWAPCHAIN_RESULT_SUCCESS)
@@ -585,7 +613,9 @@ bool XeFG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
 
     xefg_swapchain_d3d12_init_params_t params {};
 
-    int intTarget = _maxInterpolationCount;
+    // Creation never exceeds what the runtime itself reported; unlocked values are applied through
+    // the dynamic setter once the swapchain is alive.
+    int intTarget = std::min(_maxInterpolationCount, _runtimeMaxInterpolations);
 
     // Older runtimes use the creation limit; newer runtimes can change it dynamically.
     if (XeFGProxy::SetNumInterpolatedFrames() == nullptr)
@@ -845,12 +875,20 @@ bool XeFG_Dx12::Dispatch()
             auto intResult = XeFGProxy::SetNumInterpolatedFrames()(
                 _swapChainContext, Config::Instance()->FGXeFGInterpolationCount.value_or_default());
 
-            _framesToInterpolate = Config::Instance()->FGXeFGInterpolationCount.value_or_default();
-
-            if (intResult != XEFG_SWAPCHAIN_RESULT_SUCCESS)
+            if (intResult == XEFG_SWAPCHAIN_RESULT_SUCCESS)
             {
-                LOG_ERROR("SetNumInterpolatedFrames error: {} ({})", magic_enum::enum_name(intResult),
-                          (UINT) intResult);
+                _framesToInterpolate = Config::Instance()->FGXeFGInterpolationCount.value_or_default();
+            }
+            else
+            {
+                // The runtime refused the request (for example an unlocked x5/x6 on a runtime that
+                // only accepts less). Keep the last accepted count instead of latching a value the
+                // runtime never agreed to.
+                LOG_ERROR("SetNumInterpolatedFrames error: {} ({}); keeping {}",
+                          magic_enum::enum_name(intResult), (UINT) intResult, _framesToInterpolate);
+
+                Config::Instance()->FGXeFGInterpolationCount.set_volatile_value(
+                    _framesToInterpolate > 0 ? _framesToInterpolate : 1);
             }
         }
     }

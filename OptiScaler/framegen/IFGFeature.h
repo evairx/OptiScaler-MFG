@@ -73,6 +73,7 @@ class IFGFeature
     bool _waitingNewFrameData = false;
     int _framesToInterpolate = -1;
     int _maxInterpolationCount = 1;
+    int _runtimeMaxInterpolations = 1; // maximum reported by the FG runtime, before experimental overrides
     bool _supportsDMFG = false;
 
     bool _isActive = false;
