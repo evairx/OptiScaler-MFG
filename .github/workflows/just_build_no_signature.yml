@@ -8,9 +8,9 @@ name: Build (No Signing)
 on:
   workflow_dispatch:
   push:
-    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification", "optiscaler_dev1" ]
+    branches: [ "master", "main", "optiscaler_dev1", "optiscaler_dev2" ]
   pull_request:
-    branches: [ "master", "main", "feat/mfg-turing-ampere", "feat/optifg-mfg-unification", "optiscaler_dev1" ]
+    branches: [ "master", "main", "optiscaler_dev1", "optiscaler_dev2" ]
     
 env:
   # Path to the solution file relative to the root of the project.
@@ -68,12 +68,9 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        if ($env:GITHUB_REF_NAME -eq 'feat/mfg-turing-ampere') {
-            $version = "v10.0.2-pre3"
-            $releaseName = "OptiScaler-MFG v10.0.2-pre3"
-        } elseif ($env:GITHUB_REF_NAME -eq 'feat/optifg-mfg-unification') {
-            $version = "v10.0.1-pre-optifg-test"
-            $releaseName = "OptiScaler-MFG v10.0.1-pre-optifg-test"
+        if ($env:GITHUB_REF_NAME -eq 'optiscaler_dev2') {
+            $version = "v10.0.2-dev2-notested"
+            $releaseName = "OptiScaler-MFG evairx/optiscaler_dev-2 (no tested)"
         } elseif ($env:GITHUB_REF_NAME -eq 'optiscaler_dev1') {
             $version = "v10.0.2-dev1-notested"
             $releaseName = "OptiScaler-MFG evairx/optiscaler_dev-1 (no tested)"

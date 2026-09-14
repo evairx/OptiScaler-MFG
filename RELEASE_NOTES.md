@@ -1,8 +1,21 @@
-# OptiScaler-MFG evairx/optiscaler_dev-1 (NO TESTED)
+# OptiScaler-MFG evairx/optiscaler_dev-2 (NO TESTED)
 
 **This is an untested development build.** CI compiles it for Windows x64, but nothing here
 has been runtime-verified on a real GPU in a game. Behavior may change, break, or crash.
-This build supersedes the older `v10.0.2-pre1` / `v10.0.2-pre3` test builds.
+This build supersedes `v10.0.2-pre1` / `v10.0.2-pre3` and the previous `optiscaler_dev-1` build.
+
+## What's new in dev-2
+
+- **Native experimental XeFG MFG unlock (5X/6X).** Implemented directly in OptiScaler instead of
+  the closed `XeFGUnlock.asi`: enabling `[XeFG] UnlockExperimental` raises the interpolation
+  ceiling to 5 even when `libxess_fg` reports a lower maximum. Swapchain creation still uses the
+  runtime's own limit; the dynamic setter applies the unlocked value and the last accepted count
+  is kept when the runtime refuses. New menu toggle under the XeFG output section.
+  V-Sync is strongly recommended above 4X. Unverified on GPU.
+
+Everything below was already present in dev-1 and remains: native MFG separation, the Ada MFG
+unlocker with temporal midpoint correction and transactional patching, the Ampere/Turing
+hash-pinned X5/X6 patcher with X4 fallback, and the frame generation UI gating.
 
 ---
 
