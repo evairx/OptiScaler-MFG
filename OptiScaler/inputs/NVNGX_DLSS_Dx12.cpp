@@ -22,6 +22,9 @@
 #include <ankerl/unordered_dense.h>
 #include <misc/IdentifyGpu.h>
 
+#include "dlssnr/DlssNr.h"
+#include "dlssnr/DlssNr_ExposureScan.h"
+
 static ankerl::unordered_dense::map<unsigned int, ContextData<IFeature_Dx12>> Dx12Contexts;
 static std::unordered_map<unsigned int, NVSDK_NGX_Feature> HandleToFeature;
 
@@ -780,6 +783,10 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D12_ReleaseFeature(NVSDK_NGX_Handle* 
     if (!shutdown)
         LOG_INFO("releasing feature with id {0}", handleId);
 
+    // Drop the NR exposure scan's tracked references before any feature resources are freed; a
+    // pinned resource would otherwise be used after its heap is released.
+    DlssNr::ExposureScan::ReleaseTrackedResources();
+
     // OptiScaler handles start after this offset. If it's outside this range, it doesn't belong to OptiScaler.
     if (handleId < DLSS_MOD_ID_OFFSET)
     {
@@ -1093,6 +1100,13 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D12_EvaluateFeature(ID3D12GraphicsCom
             NVSDK_NGX_Result result =
                 NVNGXProxy::D3D12_EvaluateFeature()(InCmdList, InFeatureHandle, InParameters, InCallback);
             LOG_DEBUG("Native DLSS EvaluateFeature result: 0x{:X}", (uint32_t) result);
+
+            // Neural Rendering runs over what the upscaler just wrote, on the same list, so frame
+            // generation interpolates from enhanced frames. Frame generation itself is excluded
+            // because its handle carries depth and motion vectors through this same path.
+            if (result == NVSDK_NGX_Result_Success && feature != NVSDK_NGX_Feature_FrameGeneration)
+                DlssNr::EvaluateAfterUpscale(InCmdList, InParameters);
+
             return result;
         }
 
@@ -1107,7 +1121,14 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D12_EvaluateFeature(ID3D12GraphicsCom
         InParameters->Set("DLSSG.CameraFar", lastDlssgCameraFar.value());
 
     // OptiScaler internal handling
-    return TryEvaluateOptiFeature(InCmdList, InFeatureHandle, InParameters, InCallback);
+    const NVSDK_NGX_Result optiResult =
+        TryEvaluateOptiFeature(InCmdList, InFeatureHandle, InParameters, InCallback);
+
+    // Same NR pass, for OptiScaler's own upscalers rather than native DLSS.
+    if (optiResult == NVSDK_NGX_Result_Success && feature != NVSDK_NGX_Feature_FrameGeneration)
+        DlssNr::EvaluateAfterUpscale(InCmdList, InParameters);
+
+    return optiResult;
 }
 
 #pragma endregion

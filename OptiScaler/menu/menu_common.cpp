@@ -16,6 +16,8 @@
 #include <nvapi/fakenvapi.h>
 #include <hooks/Reflex_Hooks.h>
 
+#include <dlssnr/DlssNr.h>
+
 #include <version_check.h>
 
 #include <upscaler_time/UpscalerTime_Vk.h>
@@ -6847,6 +6849,7 @@ void MenuCommon::RenderMainMenuTable(RenderMenuContext& ctx)
         RenderActiveUpscalerSettings(ctx);
         RenderFrameGenerationSelection(ctx);
         RenderFrameGenerationRuntimeSettings(ctx);
+        DlssNr::RenderMenu(ctx.config, ctx.menuResScale);
         RenderFsrCommonSettings(ctx);
         RenderFramerateSettings(ctx);
 #ifdef LOW_LATENCY_INPUTS
