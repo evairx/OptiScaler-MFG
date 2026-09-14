@@ -102,7 +102,7 @@ std::string Sha256File(const std::filesystem::path& path)
     BCRYPT_HASH_HANDLE hash = nullptr;
     std::string hex;
 
-    if (BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0) >= 0)
+    if (BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0) >= 0)
     {
         bool ok = true;
         std::vector<uint8_t> buffer(1 << 16);
