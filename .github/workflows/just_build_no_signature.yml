@@ -130,7 +130,7 @@ jobs:
         tag_name: ${{ steps.get_version.outputs.version }}
         name: ${{ steps.get_version.outputs.release_name }}
         body_path: RELEASE_NOTES.md
-        draft: ${{ github.ref_name != 'optiscaler_dev1' }}
+        draft: ${{ !startsWith(github.ref_name, 'optiscaler_dev') }}
         prerelease: true
         files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
       env:
