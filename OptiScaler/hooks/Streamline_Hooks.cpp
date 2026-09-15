@@ -1114,18 +1114,11 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 
     if (dlssgPotentiallyActive)
     {
+        // The unlock state is only latched where the patch actually lands (module load), never
+        // here: flipping it on mere flow observation made the menu's save-and-restart prompt
+        // vanish a frame after the user toggled the option.
         if (IsNativeDlssgFlow())
-        {
-            // Latch the active state once the native flow is actually observed, so the menu can
-            // stop asking for a restart after the unlocker has taken effect in this process.
-            State::Instance().activeUnlockAdaMFG =
-                Config::Instance()->FGDLSSGAdaMfgUnlock.value_or(
-                    Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default());
-            State::Instance().activeUnlockAmpereMFG =
-                Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default();
-
             MfgUnlock::TryApply();
-        }
 
         const bool unlockPending = IsNativeDlssgFlow() && MfgUnlock::Pending();
 
@@ -1183,15 +1176,7 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
         return sl::Result::eErrorFeatureNotSupported;
 
     if (IsNativeDlssgFlow())
-    {
-        State::Instance().activeUnlockAdaMFG =
-            Config::Instance()->FGDLSSGAdaMfgUnlock.value_or(
-                Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default());
-        State::Instance().activeUnlockAmpereMFG =
-            Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default();
-
         MfgUnlock::TryApply();
-    }
 
     sl::Result result {};
 

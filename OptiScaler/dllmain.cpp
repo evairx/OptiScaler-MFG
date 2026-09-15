@@ -1759,7 +1759,15 @@ DWORD WINAPI getGpuInfo(LPVOID hModuleVoid)
     State::Instance().activeUnlockAmpereMFG = false;
 
     if (primaryGpu.vendorId == VendorId::Nvidia)
+    {
         AmpereMfgLoader::TrySetup();
+
+        // Same latch rule as the Ada unlock: only when the sidecar actually loaded. Otherwise the
+        // menu keeps asking for the restart that has not produced an unlock yet.
+        if (AmpereMfgLoader::LastStatus().DllLoaded &&
+            Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default())
+            State::Instance().activeUnlockAmpereMFG = true;
+    }
 
     return 0;
 }

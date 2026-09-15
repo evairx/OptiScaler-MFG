@@ -8,9 +8,9 @@ name: Build (No Signing)
 on:
   workflow_dispatch:
   push:
-    branches: [ "master", "main", "optiscaler_dev1", "optiscaler_dev2", "optiscaler_dev3", "optiscaler_dev4" ]
+    branches: [ "master", "main", "optiscaler_dev1", "optiscaler_dev2", "optiscaler_dev3", "optiscaler_dev4", "optiscaler_dev5" ]
   pull_request:
-    branches: [ "master", "main", "optiscaler_dev1", "optiscaler_dev2", "optiscaler_dev3", "optiscaler_dev4" ]
+    branches: [ "master", "main", "optiscaler_dev1", "optiscaler_dev2", "optiscaler_dev3", "optiscaler_dev4", "optiscaler_dev5" ]
     
 env:
   # Path to the solution file relative to the root of the project.
@@ -68,7 +68,10 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        if ($env:GITHUB_REF_NAME -eq 'optiscaler_dev4') {
+        if ($env:GITHUB_REF_NAME -eq 'optiscaler_dev5') {
+            $version = "dev-5"
+            $releaseName = "evairx/OptiScalerMFG dev-5"
+        } elseif ($env:GITHUB_REF_NAME -eq 'optiscaler_dev4') {
             $version = "dev-4"
             $releaseName = "evairx/OptiScalerMFG dev-4"
         } elseif ($env:GITHUB_REF_NAME -eq 'optiscaler_dev3') {
@@ -157,7 +160,7 @@ jobs:
         name: ${{ steps.get_version.outputs.release_name }}
         body_path: RELEASE_NOTES.md
         draft: ${{ !startsWith(github.ref_name, 'optiscaler_dev') }}
-        prerelease: true
+        prerelease: ${{ github.ref_name != 'optiscaler_dev5' }}
         files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,10 @@
-# evairx/OptiScalerMFG dev-4
+# evairx/OptiScalerMFG dev-5
 
-Untested development build. CI compiles Windows x64 only; nothing is runtime-verified on a GPU.
+Normal release (not a pre-release). CI compiles Windows x64 only; nothing is runtime-verified on a GPU.
+
+## New in dev-5
+- **Fixed the save-and-restart prompt disappearing**: the unlocker state was being latched a frame after the toggle by the Streamline hooks, which erased the red prompt immediately. It is now only latched where the patch actually lands (module load for Ada, sidecar load for Ampere), so the prompt stays until the game is restarted.
+- **Releases are normal releases from dev-5 on** (tag `dev-5`, asset `OptiScalerMFG_dev-5_<date>.7z`).
 
 ## New in dev-4
 - **Menu**: turning *Enable DLSS MFG Unlocker* on or off now always shows the red "Save Settings and restart the game" prompt, and the status chatter (the green `MFG Active: nvngx_dlssg.dll ... unlocked`, the partial-match and the Ampere readiness lines) is gone. The unlocker state is latched once the patch lands, so the prompt only appears when a restart is really needed.
