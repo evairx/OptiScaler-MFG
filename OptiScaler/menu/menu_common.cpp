@@ -3134,7 +3134,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
         { FGOutput::NoFG, "None" },
         { FGOutput::FSRFG, "AMD FSR FG 2X", "FSR3/4-FG, fixed at one interpolated frame (2X)\n\nFSR4-FG may be selected automatically on supported hardware" },
         { FGOutput::DLSSG, "NVIDIA DLSSG OptiFG 2X", "Autonomous OptiScaler DLSSG backend, fixed at one generated frame (2X)\n\nNVIDIA native MFG unlock is not used by this backend" },
-        { FGOutput::XeFG, "Intel XeSS 3 XeFG", "Intel XeSS 3 frame generation\n\nSupports 2X through 6X when reported by the XeFG runtime\n\nEnable UI Composition if HUD ghosting" },
+        { FGOutput::XeFG, "XeFG", "Intel XeSS 3 frame generation\n\nSupports 2X through 6X when reported by the XeFG runtime\n\nEnable UI Composition if HUD ghosting" },
     };
 
     // clang-format on
@@ -3273,8 +3273,10 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
         }
 
         // Native MFG settings belong exclusively to the game's own DLSS-G path.
+        // The FG Input choice does not gate this: the unlocker patches the game's
+        // provider whenever no OptiScaler FG output is running.
         const bool isNativeDlssgMode =
-            isNativeDlssgPresent && config->FGInput == FGInput::DLSSG && config->FGOutput == FGOutput::NoFG;
+            isNativeDlssgPresent && config->FGOutput != FGOutput::DLSSG;
 
         if (isNativeDlssgMode)
         {
@@ -3331,10 +3333,10 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 state.fgSettingsChanged = true;
             }
             ShowHelpMarker("Native NVIDIA Streamline MFG unlocker. Off by default to avoid crashes.\n"
-                           "Only available with the game's own DLSS-G (FG Input: DLSSG via Streamline, FG Output: None).\n"
+                           "Only available with the game's own DLSS-G (FG Output: None).\n"
                            "While enabled, autonomous generation (OptiFG / XeSS MFG / FSR FG) stays disabled to avoid conflicts.\n"
                            "- RTX 40 (Ada): up to 6X with Blackwell kernel retargeting.\n"
-                           "- RTX 30 / 20 (Ampere/Turing): up to 4X via SM86/SM75 routing when the sidecar backend is installed.");
+                           "- RTX 30 / 20 (Ampere/Turing): up to 6X via SM86/X5-X6 routing when the sidecar backend is installed.");
 
             // Status / Restart message
             if (activeMfgVal != unlockMfg)
@@ -3590,8 +3592,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             ImGui::Checkbox("Enable MFG Unlocker", &unlockMfg);
             ImGui::EndDisabled();
             ImGui::SameLine();
-            ImGui::TextDisabled("Available only for the game's native DLSS-G "
-                                "(FG Input: DLSSG via Streamline, FG Output: None).");
+            ImGui::TextDisabled("Available only for the game's native DLSS-G (FG Output: None).");
         }
 
         const bool isOptiFgDlssg = state.activeFgOutput == FGOutput::DLSSG;
@@ -4145,44 +4146,36 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
         {
             ImGui::SameLine(0.0f, 16.0f);
 
-            // 2X-4X hold up without an external limiter, so they get names of
-            // their own. Above them goes through a single free-form slot: the
-            // provider accepts 5X and 6X, but at those rates the generated
-            // frames are presented faster than the display refreshes unless the
-            // present rate is capped.
-            const char* intModes[] = { "2X", "3X", "4X" };
+            const char* intModes[] = { "2X", "3X", "4X", "5X", "6X" };
             constexpr int namedCount = (int) IM_ARRAYSIZE(intModes);
-
-            constexpr int highestNamedMultiplier = namedCount + 1;            // 4X
-            constexpr int firstCustomMultiplier = highestNamedMultiplier + 1; // 5X
+            constexpr int namedMultipliers = namedCount + 1; // 6X
 
             // Follows whatever the provider reports, which follows
             // XeFG\MaxInterpolatedFrames.
             const int maxMultiplier = maxInterpolationCount + 1;
-
-            const bool allowCustom = maxMultiplier >= firstCustomMultiplier;
+            const int visibleCount = std::min(namedCount, maxMultiplier - 1);
 
             const int currentCount = (int) fgOutput->GetInterpolatedFrameCount();
             const int currentSet = currentCount - 1;
-            const bool custom = allowCustom && currentSet >= namedCount;
 
-            // Remembers what was last typed, so leaving and re-entering the
-            // custom slot does not silently drop back to the first custom
-            // multiplier.
-            static int customMultiplier = firstCustomMultiplier;
+            // Only values above the named range (7X+) need the free-form slot.
+            const bool allowCustom = maxMultiplier > namedMultipliers;
+            const bool custom = allowCustom && currentCount + 1 > namedMultipliers;
+
+            static int customMultiplier = namedMultipliers + 1;
 
             char currentLabel[32];
             if (custom)
                 std::snprintf(currentLabel, sizeof(currentLabel), "%dX (custom)", currentCount + 1);
             else
                 std::snprintf(currentLabel, sizeof(currentLabel), "%s",
-                              intModes[currentSet >= 0 && currentSet < namedCount ? currentSet : 0]);
+                              intModes[currentSet >= 0 && currentSet < visibleCount ? currentSet : 0]);
 
             ImGui::PushItemWidth(95.0f * menuResScale);
 
             if (ImGui::BeginCombo("MFG", currentLabel))
             {
-                for (int i = 0; i < namedCount && i < maxInterpolationCount; i++)
+                for (int i = 0; i < visibleCount; i++)
                 {
                     if (ImGui::Selectable(intModes[i], (currentSet == i)))
                     {
@@ -4194,8 +4187,8 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
 
                 if (allowCustom && ImGui::Selectable("Custom...", custom))
                 {
-                    if (customMultiplier < firstCustomMultiplier || customMultiplier > maxMultiplier)
-                        customMultiplier = firstCustomMultiplier;
+                    if (customMultiplier <= namedMultipliers || customMultiplier > maxMultiplier)
+                        customMultiplier = namedMultipliers + 1;
 
                     LOG_INFO("MFG menu: Custom selected, asking for {}X (interpolation count {})", customMultiplier,
                              customMultiplier - 1);
@@ -4218,8 +4211,8 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
 
                 if (ImGui::InputInt("X##mfgCustom", &customMultiplier, 1, 0))
                 {
-                    if (customMultiplier < firstCustomMultiplier)
-                        customMultiplier = firstCustomMultiplier;
+                    if (customMultiplier <= namedMultipliers)
+                        customMultiplier = namedMultipliers + 1;
                     else if (customMultiplier > maxMultiplier)
                         customMultiplier = maxMultiplier;
 
@@ -4235,7 +4228,7 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
             // Above 4X the burst arrives faster than the display refreshes, and
             // nothing inside the provider can pull that back - it needs the
             // present rate capped from the outside.
-            if ((custom ? customMultiplier : currentSet + 1) > highestNamedMultiplier)
+            if ((custom ? customMultiplier : currentSet + 1) > 4)
             {
                 ImGui::SameLine(0.0f, 8.0f);
                 ImGui::TextColored(toneMapColor(ImVec4(1.f, 0.8f, 0.f, 1.f)), "! Enable VSync");
@@ -4245,9 +4238,7 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
                            "2X-4X work on their own.\n\n"
                            "Above 4X the generated frames are presented faster than\n"
                            "the display refreshes, so VSync (or a frame rate cap) is\n"
-                           "required - without it the extra frames tear and judder.\n\n"
-                           "Use Custom... for 5X and above, up to whatever\n"
-                           "maximum the provider reports.");
+                           "required - without it the extra frames tear and judder.");
         }
 
         ImGui::SameLine(0.0f, 16.0f);
@@ -7498,7 +7489,7 @@ void MenuCommon::RenderMainMenuWindow(RenderMenuContext& ctx)
     // Main menu window
     if (windowTitle.empty())
     {
-        windowTitle = StrFmt("evairx/optiscaler-mfg v%s - %s %s %s %s", OPTI_VERSION, state.gameExe.c_str(),
+        windowTitle = StrFmt("evairx/OptiScaler-MFG %s - %s %s %s %s", OPTI_VERSION, state.gameExe.c_str(),
                              state.gameName.empty() ? "" : StrFmt("- %s", state.gameName.c_str()).c_str(),
                              (state.detectedQuirks.size() > 0) ? "(Q)" : "", state.isOptiPatcherSucceed ? "(OP)" : "");
     }

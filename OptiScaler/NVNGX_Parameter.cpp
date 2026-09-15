@@ -825,7 +825,7 @@ void InitNGXParameters(NVSDK_NGX_Parameter* InParams, API api)
                  Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default())
         {
             int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
-            if (ampereMax < 1 || ampereMax > 3)
+            if (ampereMax < 1 || ampereMax > 5)
                 ampereMax = 3;
             countMax = static_cast<uint32_t>(ampereMax);
         }

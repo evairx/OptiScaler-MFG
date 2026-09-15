@@ -972,8 +972,7 @@ bool StreamlineHooks::hkcommon_slOnPluginLoad(sl::param::IParameters* params, co
 static bool IsNativeGameDlssg()
 {
     const auto& state = State::Instance();
-    if (state.nativeDlssgModule == nullptr || state.nativeDlssgModule == state.optiDLSSG ||
-        state.nativeDlssgModule == state.optiSlDLSSG)
+    if (state.nativeDlssgModule == nullptr)
         return false;
 
     wchar_t modulePath[MAX_PATH] {};
@@ -984,29 +983,13 @@ static bool IsNativeGameDlssg()
     std::wstring lower = path.lexically_normal().wstring();
     std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
 
-    std::filesystem::path mainPath(Config::Instance()->MainDllPath.value());
-    mainPath = mainPath.lexically_normal();
-    std::wstring lowerMain = mainPath.wstring();
-    std::transform(lowerMain.begin(), lowerMain.end(), lowerMain.begin(), ::towlower);
-
-    const auto isSubpath = [](std::wstring_view child, std::wstring_view parent)
-    {
-        if (child.size() <= parent.size() || child.compare(0, parent.size(), parent) != 0)
-            return false;
-
-        const wchar_t separator = child[parent.size()];
-        return separator == L'\\' || separator == L'/';
-    };
-
-    if (isSubpath(lower, lowerMain) || lower.contains(L"\\optiscaler\\") ||
-        lower.contains(L"/optiscaler/") || lower.contains(L"\\streamline\\") ||
-        lower.contains(L"/streamline/") || lower.contains(L"\\dlssg_sm86\\") ||
-        lower.contains(L"/dlssg_sm86/") || lower.ends_with(L"\\dlssg_sm86.dll") ||
-        lower.ends_with(L"/dlssg_sm86.dll"))
+    // The game's DLSS-G may have been redirected to OptiScaler's own modern
+    // nvngx_dlssg.dll. That copy is still the provider the game uses, so it
+    // counts; only the SM86 sidecar and NVIDIA's OTA/model caches are excluded.
+    if (lower.contains(L"\\dlssg_sm86\\") || lower.contains(L"/dlssg_sm86/") ||
+        lower.ends_with(L"\\dlssg_sm86.dll") || lower.ends_with(L"/dlssg_sm86.dll"))
         return false;
 
-    // Only the real DLSS-G provider counts. Model/OTA caches under the NVIDIA driver data
-    // directories are never the game's module, even when their path contains "dlssg".
     if (lower.contains(L"\\models\\") || lower.contains(L"/models/") || lower.contains(L"\\programdata\\nvidia"))
         return false;
 
@@ -1018,29 +1001,12 @@ static bool IsNativeDlssgPath(const std::wstring& modulePath)
     std::wstring lower = std::filesystem::path(modulePath).lexically_normal().wstring();
     std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
 
-    std::filesystem::path mainPath(Config::Instance()->MainDllPath.value());
-    mainPath = mainPath.lexically_normal();
-    std::wstring lowerMain = mainPath.wstring();
-    std::transform(lowerMain.begin(), lowerMain.end(), lowerMain.begin(), ::towlower);
-
-    const auto isSubpath = [](std::wstring_view child, std::wstring_view parent)
-    {
-        if (child.size() <= parent.size() || child.compare(0, parent.size(), parent) != 0)
-            return false;
-
-        const wchar_t separator = child[parent.size()];
-        return separator == L'\\' || separator == L'/';
-    };
-
-    if (isSubpath(lower, lowerMain) || lower.contains(L"\\optiscaler\\") ||
-        lower.contains(L"/optiscaler/") || lower.contains(L"\\streamline\\") ||
-        lower.contains(L"/streamline/") || lower.contains(L"\\dlssg_sm86\\") ||
-        lower.contains(L"/dlssg_sm86/") || lower.ends_with(L"\\dlssg_sm86.dll") ||
-        lower.ends_with(L"/dlssg_sm86.dll"))
+    // See IsNativeGameDlssg: OptiScaler's own modern copy is a valid provider
+    // when the game asked for DLSS-G, so the path is not what disqualifies it.
+    if (lower.contains(L"\\dlssg_sm86\\") || lower.contains(L"/dlssg_sm86/") ||
+        lower.ends_with(L"\\dlssg_sm86.dll") || lower.ends_with(L"/dlssg_sm86.dll"))
         return false;
 
-    // Only the real DLSS-G provider counts. Model/OTA caches under the NVIDIA driver data
-    // directories are never the game's module, even when their path contains "dlssg".
     if (lower.contains(L"\\models\\") || lower.contains(L"/models/") || lower.contains(L"\\programdata\\nvidia"))
         return false;
 
@@ -1050,12 +1016,10 @@ static bool IsNativeDlssgPath(const std::wstring& modulePath)
 static bool IsNativeDlssgFlow()
 {
     const auto& state = State::Instance();
-    // A Streamline input feeding FSRFG/XeFG must not be treated as native NVIDIA MFG.
-    // Native MFG is exposed only while the game owns DLSS-G and OptiScaler has no FG output.
-    const bool usingAutonomousOutput = state.activeFgOutput == FGOutput::FSRFG ||
-                                       state.activeFgOutput == FGOutput::XeFG;
-    return state.activeFgInput == FGInput::DLSSG && !usingAutonomousOutput &&
-           state.activeFgOutput == FGOutput::NoFG && IsNativeGameDlssg();
+    // The native flow is the game's own DLSS-G with no OptiScaler FG output.
+    // The FG Input selection does not decide it: when the game owns DLSS-G and
+    // nothing autonomous is generated, this is the path the unlocker patches.
+    return state.activeFgOutput == FGOutput::NoFG && IsNativeGameDlssg();
 }
 
 static uint32_t GetEffectiveDlssgUnlockedMax()
@@ -1074,7 +1038,7 @@ static uint32_t GetEffectiveDlssgUnlockedMax()
         State::Instance().activeUnlockAmpereMFG || AmpereMfgLoader::LastStatus().DllLoaded)
     {
         int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
-        if (ampereMax < 1 || ampereMax > 3)
+        if (ampereMax < 1 || ampereMax > 5)
             ampereMax = 3;
         return static_cast<uint32_t>(ampereMax);
     }
@@ -2379,7 +2343,7 @@ bool StreamlineHooks::isReflexHooked() { return o_reflex_slGetPluginFunction != 
 
 bool StreamlineHooks::registerNativeDlssgModule(HMODULE module)
 {
-    if (module == nullptr || module == State::Instance().optiDLSSG || module == State::Instance().optiSlDLSSG)
+    if (module == nullptr)
         return false;
 
     wchar_t modulePath[MAX_PATH] {};

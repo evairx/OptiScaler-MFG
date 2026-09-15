@@ -172,7 +172,11 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
             dlssgModule = NtdllProxy::LoadLibraryExW_Ldr(lpLibFullPath, NULL, 0);
         }
 
-        if (!redirectedToOpti && dlssgModule != nullptr)
+        // Any nvngx_dlssg load that reaches here was requested by the game or its
+        // Streamline runtime, so the resulting module is the provider the game will
+        // use - even when the request was redirected to OptiScaler's own modern
+        // copy. Register it so the native MFG flow and its menu know it exists.
+        if (dlssgModule != nullptr)
             StreamlineHooks::registerNativeDlssgModule(dlssgModule);
 
         return dlssgModule;
