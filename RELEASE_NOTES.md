@@ -4,7 +4,8 @@ Untested development build. CI compiles Windows x64 only; nothing is runtime-ver
 
 ## New in dev-3
 - **XeFG**: the MFG selector now lists `2X`, `3X`, `4X`, `5X` and `6X` as named options (values above 6X remain in a Custom slot), and the FG output is labelled just `XeFG`.
-- **Native NVIDIA MFG unlocker restored for the game's own DLSS-G.** dev-2 only registered a native `nvngx_dlssg.dll` when the load was not redirected, so games whose DLSS-G is redirected to OptiScaler's modern package (Silent Hill 2 ships 3.7.0) never showed *Enable MFG Unlocker* and the unlock never applied. The module is now registered in both cases, the menu section no longer demands `FG Input: DLSSG`, and the flow gate is "the game owns DLSS-G and OptiScaler has no FG output".
+- **Native NVIDIA MFG unlocker restored for the game's own DLSS-G.** dev-2 only registered a native `nvngx_dlssg.dll` when the load was not redirected, so games whose DLSS-G is redirected to OptiScaler's modern package (Silent Hill 2 ships 3.7.0) never showed *Enable MFG Unlocker* and the unlock never applied. The module is now registered in both cases, the unlock is applied at module load like pre-1 (not only once the game enables DLSS-G), and the menu section appears whenever the game has its own DLSS-G and FG Input/FG Output are both `None`.
+- **Menu flow for the unlocker**: renamed to *Enable DLSS MFG Unlocker*; while it is enabled the FG Input/FG Output selectors are locked out to avoid conflicts, and the native MFG section is hidden as soon as any FG input/output is selected.
 - **Ampere/Turing**: the advertised multi-frame ceiling follows the SM86 X5/X6 patched-loader bound (up to 6X) instead of being clamped to 4X.
 - **NR (DLSS 5)**: `nvngx_dlssnr.dll` (ShortFuse RTX 20/30/40) is bundled in the release package, fetched by CI from the `nr-runtime` release or the `NVNGX_DLSSNR_URL` repository variable.
 - Branding: builds identify as `evairx/OptiScaler-MFG dev-3`.

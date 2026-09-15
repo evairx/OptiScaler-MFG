@@ -30,6 +30,7 @@
 
 #include <fsr4/FSR4ModelSelection.h>
 #include <fsr4/FSR4Upgrade.h>
+#include <framegen/dlssg/MfgUnlock.h>
 #include <misc/IdentifyGpu.h>
 #include <low_latency/input/input_uell.h>
 
@@ -175,9 +176,11 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
         // Any nvngx_dlssg load that reaches here was requested by the game or its
         // Streamline runtime, so the resulting module is the provider the game will
         // use - even when the request was redirected to OptiScaler's own modern
-        // copy. Register it so the native MFG flow and its menu know it exists.
-        if (dlssgModule != nullptr)
-            StreamlineHooks::registerNativeDlssgModule(dlssgModule);
+        // copy. Register it so the native MFG flow and its menu know it exists, and
+        // apply the Ada unlock right away (when enabled): the game may query its
+        // multiplier limits before it ever enables DLSS-G on the Streamline hooks.
+        if (dlssgModule != nullptr && StreamlineHooks::registerNativeDlssgModule(dlssgModule))
+            MfgUnlock::TryApply(dlssgModule);
 
         return dlssgModule;
     }

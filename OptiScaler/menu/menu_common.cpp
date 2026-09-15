@@ -3204,7 +3204,18 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
     {
         ImGui::SeparatorText("Frame Generation");
 
-        if (ImGui::BeginTable("fgSelection", 2, ImGuiTableFlags_SizingStretchSame))
+        // The DLSS MFG Unlocker owns the game's DLSS-G path; selecting any OptiScaler FG
+        // input/output next to it only invites conflicts, so the selectors are locked out
+        // while the unlocker is enabled.
+        const bool nativeUnlockRequested =
+            isAda ? config->FGDLSSGAdaMfgUnlock.value_or(config->FGDLSSGUnlockAdaMFG.value_or_default())
+                  : config->FGDLSSGAmpereMfgUnlock.value_or_default();
+
+        if (nativeUnlockRequested)
+        {
+            ImGui::TextDisabled("FG Input / FG Output are unavailable while the DLSS MFG Unlocker is enabled.");
+        }
+        else if (ImGui::BeginTable("fgSelection", 2, ImGuiTableFlags_SizingStretchSame))
         {
             ImGui::TableNextColumn();
 
@@ -3272,16 +3283,25 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             ImGui::Spacing();
         }
 
-        // Native MFG settings belong exclusively to the game's own DLSS-G path.
-        // The FG Input choice does not gate this: the unlocker patches the game's
-        // provider whenever no OptiScaler FG output is running.
+        // Native MFG settings belong exclusively to the game's own DLSS-G path, and only
+        // while no OptiScaler FG input/output is selected. The section stays visible when
+        // the unlocker is enabled on a stale FG selection, with a warning, so it can be
+        // turned off again from here.
         const bool isNativeDlssgMode =
-            isNativeDlssgPresent && config->FGOutput != FGOutput::DLSSG;
+            isNativeDlssgPresent && config->FGInput == FGInput::NoFG && config->FGOutput == FGOutput::NoFG;
+        const bool nativeUnlockerNeedsAttention =
+            isNativeDlssgPresent && nativeUnlockRequested && !isNativeDlssgMode;
 
-        if (isNativeDlssgMode)
+        if (isNativeDlssgMode || nativeUnlockerNeedsAttention)
         {
             ImGui::Spacing();
             ImGui::SeparatorText("NVIDIA DLSS Multi-Frame Generation (Native Game DLSS-G)");
+
+            if (nativeUnlockerNeedsAttention)
+            {
+                ImGui::TextColored(toneMapColor(ImVec4(1.f, 0.6f, 0.2f, 1.f)),
+                                   "! Unlocker inactive: set FG Input and FG Output back to None.");
+            }
 
             if (isAda)
             {
@@ -3316,7 +3336,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             }
 
             bool unlockMfg = isAda ? mfgAdaVal : mfgAmpereVal;
-            if (ImGui::Checkbox("Enable MFG Unlocker", &unlockMfg))
+            if (ImGui::Checkbox("Enable DLSS MFG Unlocker", &unlockMfg))
             {
                 if (isAda)
                 {
@@ -3581,18 +3601,9 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             else
             {
                 ImGui::Spacing();
-                ImGui::TextDisabled("(!) Enable the MFG Unlocker, save settings and restart the game.");
+                ImGui::TextDisabled("(!) Enable the DLSS MFG Unlocker, save settings and restart the game.");
                 ImGui::Spacing();
             }
-        }
-        else if (isNativeDlssgPresent)
-        {
-            bool unlockMfg = isAda ? mfgAdaVal : mfgAmpereVal;
-            ImGui::BeginDisabled();
-            ImGui::Checkbox("Enable MFG Unlocker", &unlockMfg);
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            ImGui::TextDisabled("Available only for the game's native DLSS-G (FG Output: None).");
         }
 
         const bool isOptiFgDlssg = state.activeFgOutput == FGOutput::DLSSG;
