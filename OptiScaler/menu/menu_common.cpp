@@ -3369,70 +3369,6 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
             else if (unlockMfg)
             {
                 ImGui::Spacing();
-                if (isAda)
-                {
-                    const auto& mfgStatus = MfgUnlock::LastStatus();
-                    if (mfgStatus.AdvertiseMatched && mfgStatus.ValidateMatched &&
-                        (mfgStatus.KernelsRewritten > 0 || mfgStatus.TemporalFixPatches > 0))
-                    {
-                        std::string ver = mfgStatus.SnippetVersion.empty() ? "" : (" (" + mfgStatus.SnippetVersion + ")");
-                        ImGui::TextColored(toneMapColor(ImVec4(0.0f, 1.0f, 0.25f, 1.0f)),
-                                           "MFG Active: nvngx_dlssg.dll%s unlocked (up to %dX, %u kernels retargeted, %u temporal descriptors).",
-                                           ver.c_str(),
-                                           MfgUnlock::UnlockedMax() + 1,
-                                           mfgStatus.KernelsRewritten,
-                                           mfgStatus.TemporalFixPatches);
-                    }
-                    else if (mfgStatus.ModuleFound)
-                    {
-                        ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.6f, 0.2f, 1.0f)),
-                                           "MFG Status: nvngx_dlssg.dll (%s) partial match (Adv:%d Val:%d Kernels:%u).",
-                                           mfgStatus.SnippetVersion.c_str(),
-                                           mfgStatus.AdvertiseMatched ? 1 : 0,
-                                           mfgStatus.ValidateMatched ? 1 : 0,
-                                           mfgStatus.KernelsRewritten);
-                    }
-                    else
-                    {
-                        ImGui::TextColored(toneMapColor(ImVec4(0.2f, 0.8f, 1.0f, 1.0f)),
-                                           "MFG Ready: nvngx_dlssg.dll will be patched when Frame Generation initializes.");
-                    }
-                }
-                else
-                {
-                    const auto& ampereStatus = AmpereMfgLoader::LastStatus();
-                    if (ampereStatus.DllLoaded)
-                    {
-                        std::string router = AmpereMfgLoader::ResolveRouter();
-                        const bool experimental = ampereStatus.ExperimentalPatched;
-                        const int configuredMax = std::max(3, config->FGDLSSGAmpereMfgMaxFrames.value_or_default());
-                        const int maxDisplay = (experimental ? configuredMax : std::min(3, configuredMax)) + 1;
-                        ImGui::TextColored(toneMapColor(ImVec4(0.0f, 1.0f, 0.25f, 1.0f)),
-                                           "MFG Active: %s loaded (%s router, PTX JIT, up to %dX%s).",
-                                           experimental ? "patched dlssg_sm86 loader" : "dlssg_sm86.dll",
-                                           router.c_str(),
-                                           maxDisplay,
-                                           experimental ? ", experimental" : "");
-
-                        if (ampereStatus.ExperimentalFallback)
-                        {
-                            ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.6f, 0.2f, 1.0f)),
-                                               "Experimental X5/X6 unavailable: %s",
-                                               ampereStatus.ExperimentalDetail.c_str());
-                        }
-                    }
-                    else if (!ampereStatus.ErrorMessage.empty())
-                    {
-                        ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.4f, 0.2f, 1.0f)),
-                                           "MFG Error: %s", ampereStatus.ErrorMessage.c_str());
-                    }
-                    else
-                    {
-                        ImGui::TextColored(toneMapColor(ImVec4(0.2f, 0.8f, 1.0f, 1.0f)),
-                                           "MFG Ready: dlssg_sm86.dll will be initialized.");
-                    }
-                }
-                ImGui::Spacing();
 
                 if (isAda)
                 {
@@ -7500,7 +7436,7 @@ void MenuCommon::RenderMainMenuWindow(RenderMenuContext& ctx)
     // Main menu window
     if (windowTitle.empty())
     {
-        windowTitle = StrFmt("evairx/OptiScaler-MFG %s - %s %s %s %s", OPTI_VERSION, state.gameExe.c_str(),
+        windowTitle = StrFmt("evairx/OptiScalerMFG %s - %s %s %s %s", OPTI_VERSION, state.gameExe.c_str(),
                              state.gameName.empty() ? "" : StrFmt("- %s", state.gameName.c_str()).c_str(),
                              (state.detectedQuirks.size() > 0) ? "(Q)" : "", state.isOptiPatcherSucceed ? "(OP)" : "");
     }

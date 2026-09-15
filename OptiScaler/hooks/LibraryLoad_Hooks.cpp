@@ -180,7 +180,15 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
         // apply the Ada unlock right away (when enabled): the game may query its
         // multiplier limits before it ever enables DLSS-G on the Streamline hooks.
         if (dlssgModule != nullptr && StreamlineHooks::registerNativeDlssgModule(dlssgModule))
+        {
             MfgUnlock::TryApply(dlssgModule);
+
+            // Latch the unlocker state once the Ada patch has landed, so the menu stops
+            // asking for a restart in a session where it already took effect.
+            if (MfgUnlock::UnlockedMax() > 0)
+                State::Instance().activeUnlockAdaMFG = Config::Instance()->FGDLSSGAdaMfgUnlock.value_or(
+                    Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default());
+        }
 
         return dlssgModule;
     }

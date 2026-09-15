@@ -1833,7 +1833,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
         PrepareLogger();
 
-        spdlog::warn("evairx/OptiScaler-MFG {0} loaded", VER_PRODUCT_VERSION_STR);
+        spdlog::warn("evairx/OptiScalerMFG {0} loaded", VER_PRODUCT_VERSION_STR);
         spdlog::warn("---------------------------------");
         spdlog::warn("OptiScaler is freely downloadable from");
         spdlog::warn("GitHub : https://github.com/optiscaler/OptiScaler/releases");

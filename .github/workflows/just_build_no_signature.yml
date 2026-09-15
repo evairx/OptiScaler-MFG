@@ -8,9 +8,9 @@ name: Build (No Signing)
 on:
   workflow_dispatch:
   push:
-    branches: [ "master", "main", "optiscaler_dev1", "optiscaler_dev2", "optiscaler_dev3" ]
+    branches: [ "master", "main", "optiscaler_dev1", "optiscaler_dev2", "optiscaler_dev3", "optiscaler_dev4" ]
   pull_request:
-    branches: [ "master", "main", "optiscaler_dev1", "optiscaler_dev2", "optiscaler_dev3" ]
+    branches: [ "master", "main", "optiscaler_dev1", "optiscaler_dev2", "optiscaler_dev3", "optiscaler_dev4" ]
     
 env:
   # Path to the solution file relative to the root of the project.
@@ -68,15 +68,18 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        if ($env:GITHUB_REF_NAME -eq 'optiscaler_dev3') {
-            $version = "v10.0.2-dev3-notested"
-            $releaseName = "OptiScaler-MFG evairx/optiscaler_dev-3 (no tested)"
+        if ($env:GITHUB_REF_NAME -eq 'optiscaler_dev4') {
+            $version = "dev-4"
+            $releaseName = "evairx/OptiScalerMFG dev-4"
+        } elseif ($env:GITHUB_REF_NAME -eq 'optiscaler_dev3') {
+            $version = "dev-3"
+            $releaseName = "evairx/OptiScalerMFG dev-3"
         } elseif ($env:GITHUB_REF_NAME -eq 'optiscaler_dev2') {
-            $version = "v10.0.2-dev2-notested"
-            $releaseName = "OptiScaler-MFG evairx/optiscaler_dev-2 (no tested)"
+            $version = "dev-2"
+            $releaseName = "evairx/OptiScalerMFG dev-2"
         } elseif ($env:GITHUB_REF_NAME -eq 'optiscaler_dev1') {
-            $version = "v10.0.2-dev1-notested"
-            $releaseName = "OptiScaler-MFG evairx/optiscaler_dev-1 (no tested)"
+            $version = "dev-1"
+            $releaseName = "evairx/OptiScalerMFG dev-1"
         } else {
             $version = "v10.0.2-pre3"
             $releaseName = "OptiScaler-MFG v10.0.2-pre3"
@@ -86,7 +89,7 @@ jobs:
         $date = Get-Date -Format "yyyyMMdd"
         
         # Construct the output filename with version and date
-        $outputFileName = "OptiScaler_${version}_${date}"
+        $outputFileName = "OptiScalerMFG_${version}_${date}"
         
         # Output the generated filename
         Write-Output "Generated Filename: $outputFileName"

@@ -1,6 +1,10 @@
-# OptiScaler-MFG evairx/optiscaler_dev-3 (NO TESTED)
+# evairx/OptiScalerMFG dev-4
 
 Untested development build. CI compiles Windows x64 only; nothing is runtime-verified on a GPU.
+
+## New in dev-4
+- **Menu**: turning *Enable DLSS MFG Unlocker* on or off now always shows the red "Save Settings and restart the game" prompt, and the status chatter (the green `MFG Active: nvngx_dlssg.dll ... unlocked`, the partial-match and the Ampere readiness lines) is gone. The unlocker state is latched once the patch lands, so the prompt only appears when a restart is really needed.
+- **Versioning**: builds are named `evairx/OptiScalerMFG dev-N` (tag `dev-N`, asset `OptiScalerMFG_dev-N_<date>.7z`). No more `10.0.2` version prefix.
 
 ## New in dev-3
 - **XeFG**: the MFG selector now lists `2X`, `3X`, `4X`, `5X` and `6X` as named options (values above 6X remain in a Custom slot), and the FG output is labelled just `XeFG`.
