@@ -3603,6 +3603,20 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                         AmpereMfgLoader::WriteIniFiles();
                     }
                     ShowHelpMarker("Enables fast approximate hardware sampling on SM86 (RTX 30) for improved frametimes. Uncheck for exact output.");
+
+                    if (isAmpere || isTuring)
+                    {
+                        bool native6x = config->FGDLSSGAmpereNative6XRuntime.value_or_default();
+                        if (ImGui::Checkbox("Experimental: sdli1995 0.3.x native 6X", &native6x))
+                        {
+                            config->FGDLSSGAmpereNative6XRuntime = native6x;
+                            AmpereMfgLoader::WriteIniFiles();
+                            state.fgSettingsChanged = true;
+                        }
+                        ShowHelpMarker("Needs the sdli1995 0.3.x runtime placed by hand in OptiScaler/dlssg_sm86\n"
+                                       "(version.dll / dlssg_sm86.dll / dlssg_native_031.dll, hash-verified).\n"
+                                       "Native 6X, unverified on GPU. Falls back to the proven 0.2.4 path when absent.");
+                    }
                 }
 
                 if (state.dlssgGameDMFGSupported && config->FGOutput != FGOutput::DLSSG)

@@ -914,6 +914,7 @@ class Config
     CustomOptional<int> FGDLSSGAmpereMfgMaxFrames { 3 };        // 0-5: 0=runtime default (3X), 1=2X, 2=3X, 3=4X, 4=5X (experimental), 5=6X (experimental)
     CustomOptional<std::string, NoDefault> FGDLSSGAmpereMfgKernelImage;     // Auto / PTX / Cubin
     CustomOptional<bool> FGDLSSGAmpereMfgHardwareBilinear { false };        // Optional approximate sampling (SM86 only)
+    CustomOptional<bool> FGDLSSGAmpereNative6XRuntime { false };            // Experimental: hash-pinned sdli1995 0.3.x runtime dropped in the sidecar folder, used as-is for native 6X
     CustomOptional<bool> FGDLSSGQualityGuard { true };          // Quality Guard: filters mismatched HUD separation in 3X/4X to prevent flickering
     CustomOptional<int> FGDLSSGBoundaryMitigation { 1 };        // 0=off, 1=balanced (upstream 1.0 default), 2=aggressive
     CustomOptional<bool> FGDLSSGForceFlipMeteringOff { true };  // Software flip pacing (RSYNC) for Ada multi-frame (prevents presentation freezes and black lines in 3X/4X)

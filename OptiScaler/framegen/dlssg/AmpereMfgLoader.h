@@ -16,6 +16,10 @@ struct Status
     bool ExperimentalPatched = false;   // hash-pinned loader patched and loaded
     bool ExperimentalFallback = false;  // 5X/6X unavailable; proven 4X path kept
     std::string ExperimentalDetail;     // why the experimental patch applied or failed
+    bool Native6XRequested = false;     // Config opted into the sdli1995 0.3.x runtime
+    bool Native6XRuntimeFound = false;  // A hash-pinned 0.3.x binary is in the sidecar folder
+    bool Native6XActive = false;        // That runtime is the one being loaded, used as-is
+    std::string Native6XDetail;         // Version/ceiling detail for logs, menu and reports
     std::string ErrorMessage; // Human-readable error if anything failed
 };
 
@@ -56,6 +60,40 @@ inline std::string FormatIniContent(int maxFrames, const std::string& kernelImg,
     ss << "MaxGeneratedFrames=" << maxFrames << "\n\n";
     ss << "[Logging]\n";
     ss << "Level=" << validLogLevel << "\n";
+
+    return ss.str();
+}
+
+/// Formats dlssg_sm86.ini for the sdli1995 0.3.x proxy runtime. The 0.3.x loader derives its
+/// ceiling from [FrameGeneration] MaxGeneratedFrames (3 = 4X; 5 = 6X on the 310.9 build only,
+/// the 310.1 build clamps it back to 3 and just logs it). The runtime is used exactly as
+/// shipped: this INI is the only thing written for it.
+inline std::string FormatNativeIniContent(int maxFrames, const std::string& router = "SM86", int logLevel = 1)
+{
+    if (maxFrames != 3 && maxFrames != 5)
+        maxFrames = 3;
+
+    std::string validRouter = router;
+    if (validRouter != "SM75" && validRouter != "SM86")
+        validRouter = "SM86";
+
+    int validLogLevel = (logLevel >= 0 && logLevel <= 3) ? logLevel : 1;
+
+    std::ostringstream ss;
+    ss << "; sdli1995 0.3.x native runtime. Restart the game after changing this file.\n";
+    ss << "[General]\n";
+    ss << "Enabled=1\n\n";
+    ss << "[FrameGeneration]\n";
+    ss << "Optimized=1\n";
+    ss << "MaxGeneratedFrames=" << maxFrames << "\n\n";
+    ss << "[Compatibility]\n";
+    ss << "Router=" << validRouter << "\n\n";
+    ss << "[Logging]\n";
+    ss << "Level=" << validLogLevel << "\n";
+    ss << "Directory=dlssg_sm86\\logs\n\n";
+    ss << "[Runtime]\n";
+    ss << "Mode=Bundled\n";
+    ss << "CacheDirectory=\n";
 
     return ss.str();
 }

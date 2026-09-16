@@ -243,6 +243,7 @@ bool Config::Reload(std::filesystem::path iniPath)
                     FGDLSSGAmpereMfgKernelImage.set_from_config("Auto");
             }
             FGDLSSGAmpereMfgHardwareBilinear.set_from_config(readBool("DLSSG", "AmpereMfgHardwareBilinear"));
+            FGDLSSGAmpereNative6XRuntime.set_from_config(readBool("DLSSG", "AmpereNative6XRuntime"));
             FGDLSSGQualityGuard.set_from_config(readBool("DLSSG", "QualityGuard"));
             FGDLSSGBoundaryMitigation.set_from_config(readInt("DLSSG", "BoundaryMitigation"));
             if (FGDLSSGBoundaryMitigation.has_value() &&
@@ -1110,6 +1111,8 @@ bool Config::SaveIni()
                      Instance()->FGDLSSGAmpereMfgKernelImage.value_for_config_or("Auto").c_str());
         ini.SetValue("DLSSG", "AmpereMfgHardwareBilinear",
                      GetBoolValue(Instance()->FGDLSSGAmpereMfgHardwareBilinear.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "AmpereNative6XRuntime",
+                     GetBoolValue(Instance()->FGDLSSGAmpereNative6XRuntime.value_for_config()).c_str());
         ini.SetValue("DLSSG", "QualityGuard",
                      GetBoolValue(Instance()->FGDLSSGQualityGuard.value_for_config()).c_str());
         ini.SetValue("DLSSG", "BoundaryMitigation",

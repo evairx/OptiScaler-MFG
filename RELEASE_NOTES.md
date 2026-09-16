@@ -6,7 +6,7 @@ Work-in-progress base for the next integration round. CI compiles Windows x64 on
 - NR sync from wilsjo2 (release-v0.8.4 memory and pass controls, nr-game-validation retirement, starfield serialization, nr-direct-runtime, nr-init-diagnostics).
 - Small upstream ports (pacing freeze detect for MFG above 2X, DXGI export hardening, _trigger reset, FSRFG checks, UE compat).
 - Optional: mavismmg 1.0 boundary artifact mitigation and silhouette guard.
-- Experimental: sdli1995 0.3.1 for native 6X on RTX 20/30, kept opt-in with the tested X4 fallback untouched.
+- Experimental: sdli1995 0.3.x for native 6X on RTX 20/30 via `[DLSSG] AmpereNative6XRuntime` (default off): a hash-pinned runtime dropped by hand in `OptiScaler/dlssg_sm86/` (0.3.1/0.3.0, `version.dll` / `dlssg_sm86.dll` / `dlssg_native_031.dll`) is used as-is, never patched, with `MaxGeneratedFrames=5` and the resolved Router; missing binary keeps the tested 0.2.4 X4/X5-X6 path intact.
 
 # evairx/OptiScalerMFG dev-5
 

@@ -12,7 +12,10 @@
 
 #include <fstream>
 #include <sstream>
+#include <algorithm>
 #include <mutex>
+#include <optional>
+#include <string_view>
 #include <vector>
 #include <cstring>
 
@@ -55,6 +58,79 @@ namespace
 // Set when the experimental patch fails, so the companion INI keeps the proven X4 bound even
 // though the config still asks for more until the user changes it.
 int s_iniMaxFramesOverride = 0;
+
+std::string Sha256File(const std::filesystem::path& path);
+
+// sdli1995 0.3.x proxy runtimes, matched by source hash. This is a read-only path: the binary
+// is either accepted as-is or rejected, never patched, and it is only searched when the user
+// opted in, so the proven 0.2.4 flow below stays byte-for-byte the same otherwise.
+struct NativeRuntimeSource
+{
+    std::string_view sha256;
+    std::string_view label;
+    bool supports6x;
+};
+
+constexpr NativeRuntimeSource kNativeRuntimeSources[] = {
+    { "3d4c7d537a6e71e3a9d41ffc6487e054b26c56d27b7c0825d39eaa7ef0c7e86d", "0.3.1", true },  // 310.9, 6X
+    { "a22d2453f25d7df3fdc0d6d683c21f01769a115439d58f1341183a75faaf8c7d", "0.3.0", false }, // 310.1, 4X
+};
+
+constexpr std::wstring_view kNativeRuntimeNames[] = {
+    L"version.dll",
+    L"dlssg_sm86.dll",
+    L"dlssg_native_031.dll",
+};
+
+struct NativeRuntime
+{
+    std::filesystem::path path;
+    std::string label;
+    bool supports6x = false;
+};
+
+// Set by TrySetup when the 0.3.x runtime wins over the 0.2.4 loader. WriteIniFiles and the menu
+// read it to emit the 0.3.x layout instead of the 0.2.4 one.
+std::optional<NativeRuntime> s_nativeRuntime;
+
+std::optional<NativeRuntime> FindNativeRuntime(const std::vector<std::filesystem::path>& dirs, std::string& detail)
+{
+    std::error_code error;
+    std::vector<std::wstring> visited;
+
+    for (const auto& dir : dirs)
+    {
+        const auto normalized = dir.lexically_normal().wstring();
+        if (std::find(visited.begin(), visited.end(), normalized) != visited.end())
+            continue;
+        visited.push_back(normalized);
+
+        for (const auto& name : kNativeRuntimeNames)
+        {
+            auto candidate = dir / name;
+            if (!std::filesystem::exists(candidate, error))
+                continue;
+
+            const auto hash = Sha256File(candidate);
+            if (hash.empty())
+                continue;
+
+            for (const auto& source : kNativeRuntimeSources)
+            {
+                if (hash != source.sha256)
+                    continue;
+
+                detail = std::format("sdli1995 {} runtime detected at {} ({})", source.label,
+                                     wstring_to_string(candidate.filename().wstring()),
+                                     source.supports6x ? "6X" : "4X ceiling");
+                return NativeRuntime { candidate, std::string(source.label), source.supports6x };
+            }
+        }
+    }
+
+    detail = "no hash-pinned sdli1995 0.3.x runtime found in the sidecar folder";
+    return std::nullopt;
+}
 
 int RequestedMaxFrames()
 {
@@ -242,6 +318,19 @@ int EffectiveIniMaxFrames()
 
 std::string GenerateIniContent()
 {
+    if (s_nativeRuntime.has_value())
+    {
+        // The 0.3.x runtime reads its own layout; the ceiling is its native one (5 = 6X on the
+        // 310.9 build), not the 0.2.4 patched bound requested in the config.
+        std::string router = ResolveRouter();
+        const int maxFrames = s_nativeRuntime->supports6x ? 5 : 3;
+
+        LOG_INFO("AmpereMfgLoader: Router selected: {} for GPU: {}, native sdli1995 {} runtime, maxFrames: {}",
+                 router, IdentifyGpu::getPrimaryGpu().name, s_nativeRuntime->label, maxFrames);
+
+        return FormatNativeIniContent(maxFrames, router, 1);
+    }
+
     auto* cfg = Config::Instance();
     int maxFrames = EffectiveIniMaxFrames();
 
@@ -278,6 +367,11 @@ void WriteIniFiles()
     targets.push_back(basePath / L"dlssg_sm86.ini");
     targets.push_back(basePath / L"OptiScaler" / L"dlssg_sm86.ini");
     targets.push_back(basePath / L"OptiScaler" / L"dlssg_sm86" / L"dlssg_sm86.ini");
+
+    // The 0.3.x proxy reads the INI from its own folder, so make sure the folder the binary was
+    // actually found in gets one too.
+    if (s_nativeRuntime.has_value())
+        targets.push_back(s_nativeRuntime->path.parent_path() / L"dlssg_sm86.ini");
 
     for (const auto& iniPath : targets)
     {
@@ -351,33 +445,68 @@ void TrySetup()
     if (!std::filesystem::exists(dllPath, fileError))
         dllPath = basePath / L"OptiScaler" / L"dlssg_sm86" / L"dlssg_sm86.dll";
     if (!std::filesystem::exists(dllPath, fileError))
-    {
         dllPath = basePath / L"dlssg_sm86" / L"dlssg_sm86.dll";
-    }
-    if (!std::filesystem::exists(dllPath, fileError))
+
+    bool dllFound = std::filesystem::exists(dllPath, fileError);
+    if (!dllFound)
     {
         // Fallback: check directly beside OptiScaler DLL
         auto fallbackPath = basePath / L"dlssg_sm86.dll";
         if (std::filesystem::exists(fallbackPath, fileError))
         {
             dllPath = fallbackPath;
+            dllFound = true;
+        }
+    }
+
+    // Experimental native 6X: a hand-placed, hash-pinned sdli1995 0.3.x runtime in the sidecar
+    // folder takes priority over the 0.2.4 loader. It is used exactly as shipped (never patched)
+    // and can run without dlssg_sm86.dll; when it is missing the 0.2.4 path below is untouched.
+    if (cfg->FGDLSSGAmpereNative6XRuntime.value_or_default())
+    {
+        s_status.Native6XRequested = true;
+
+        std::vector<std::filesystem::path> dirs;
+        if (dllFound)
+            dirs.push_back(dllPath.parent_path());
+        dirs.push_back(std::filesystem::path(cfg->MainDllPath.value_or(basePath.wstring())) / L"dlssg_sm86");
+        dirs.push_back(basePath / L"OptiScaler" / L"dlssg_sm86");
+        dirs.push_back(basePath / L"dlssg_sm86");
+
+        std::string detectDetail;
+        auto runtime = FindNativeRuntime(dirs, detectDetail);
+        if (runtime.has_value())
+        {
+            s_nativeRuntime = runtime;
+            s_status.Native6XRuntimeFound = true;
+            s_status.Native6XActive = true;
+            s_status.Native6XDetail =
+                std::format("sdli1995 {} native, {}", runtime->label, runtime->supports6x ? "6X" : "4X ceiling");
+            LOG_INFO("AmpereMfgLoader: {} (used as-is, no patching)", s_status.Native6XDetail);
         }
         else
         {
-            s_status.DllFound = false;
-            s_status.ErrorMessage = "dlssg_sm86.dll not found in OptiScaler/dlssg_sm86/ or dlssg_sm86/ subfolders.";
-            LOG_ERROR("AmpereMfgLoader: {}", s_status.ErrorMessage);
-            return;
+            s_status.Native6XDetail = detectDetail;
+            LOG_WARN("AmpereMfgLoader: AmpereNative6XRuntime requested but {}; keeping the 0.2.4 path",
+                     detectDetail);
         }
+    }
+
+    if (!dllFound && !s_nativeRuntime.has_value())
+    {
+        s_status.DllFound = false;
+        s_status.ErrorMessage = "dlssg_sm86.dll not found in OptiScaler/dlssg_sm86/ or dlssg_sm86/ subfolders.";
+        LOG_ERROR("AmpereMfgLoader: {}", s_status.ErrorMessage);
+        return;
     }
     s_status.DllFound = true;
 
     // Experimental X5/X6: build a patched copy of a hash-pinned loader and point the sideload at
     // it. Any mismatch or failure falls back to the proven X4 configuration.
-    auto loadPath = dllPath;
+    auto loadPath = s_nativeRuntime.has_value() ? s_nativeRuntime->path : dllPath;
     const int requestedFrames = RequestedMaxFrames();
 
-    if (requestedFrames > 3)
+    if (!s_nativeRuntime.has_value() && requestedFrames > 3)
     {
         s_status.ExperimentalRequested = true;
 
@@ -415,9 +544,10 @@ void TrySetup()
     if (!hMod)
     {
         DWORD err = GetLastError();
+        const auto fileName = wstring_to_string(loadPath.filename().wstring());
         s_status.DllLoaded = false;
-        s_status.ErrorMessage = "Failed to load dlssg_sm86.dll (error code " + std::to_string(err) + ").";
-        LOG_ERROR("AmpereMfgLoader: Failed to load dlssg_sm86.dll, error: {}", err);
+        s_status.ErrorMessage = "Failed to load " + fileName + " (error code " + std::to_string(err) + ").";
+        LOG_ERROR("AmpereMfgLoader: Failed to load {}, error: {}", fileName, err);
         return;
     }
 
