@@ -7,6 +7,7 @@ Work-in-progress base for the next integration round. CI compiles Windows x64 on
 - Small upstream ports (pacing freeze detect for MFG above 2X, DXGI export hardening, _trigger reset, FSRFG checks, UE compat).
 - Optional: mavismmg 1.0 boundary artifact mitigation and silhouette guard.
 - Experimental: sdli1995 0.3.x for native 6X on RTX 20/30 via `[DLSSG] AmpereNative6XRuntime` (default off): a hash-pinned runtime dropped by hand in `OptiScaler/dlssg_sm86/` (0.3.1/0.3.0, `version.dll` / `dlssg_sm86.dll` / `dlssg_native_031.dll`) is used as-is, never patched, with `MaxGeneratedFrames=5` and the resolved Router; missing binary keeps the tested 0.2.4 X4/X5-X6 path intact.
+- RE Engine warning: when the game folder has `re_chunk_*.pak` / `re_dlc_*.pak` and no `dinput8.dll`, a one-shot toast plus a menu header line warns that REFramework (praydog/onehoon) may be required to avoid a crash while loading (e.g. Onimusha: Way of the Sword).
 
 # evairx/OptiScalerMFG dev-5
 

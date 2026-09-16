@@ -163,6 +163,25 @@ static bool HasUnrealBinariesParentStructure(const std::filesystem::path& exePat
     return isBinariesFolder && isWindowsPlatformFolder;
 }
 
+static bool HasREEnginePaks(const std::filesystem::path& exeDir)
+{
+    std::error_code ec;
+
+    for (const auto& entry : std::filesystem::directory_iterator(exeDir, ec))
+    {
+        if (!entry.is_regular_file(ec))
+            continue;
+
+        std::wstring filename = Util::ToLower(entry.path().filename().wstring());
+
+        if (filename.ends_with(L".pak") &&
+            (filename.starts_with(L"re_chunk_") || filename.starts_with(L"re_dlc_")))
+            return true;
+    }
+
+    return false;
+}
+
 void Util::GetExeInfo()
 {
     // In case of working ag version.dll
@@ -173,6 +192,19 @@ void Util::GetExeInfo()
     auto exePathFilename = exePath.filename().string();
     auto exePathFilenameW = exePath.filename().wstring();
     State::Instance().gameExe = exePathFilename;
+
+    // Capcom RE Engine games ship re_chunk_*.pak / re_dlc_*.pak next to the exe.
+    // Without a loader such as REFramework (dinput8.dll) OptiScaler may crash during loading.
+    if (HasREEnginePaks(exeDir))
+    {
+        std::error_code ec;
+
+        State::Instance().isREEngine = true;
+        State::Instance().reframeworkMissing = !std::filesystem::exists(exeDir / L"dinput8.dll", ec);
+
+        LOG_INFO("RE Engine detected, REFramework (dinput8.dll): {0}",
+                 State::Instance().reframeworkMissing ? "missing" : "present");
+    }
 
     wchar_t sysFolder[MAX_PATH];
     GetSystemDirectory(sysFolder, MAX_PATH);

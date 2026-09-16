@@ -1579,6 +1579,17 @@ void MenuCommon::UpdateVersionAndStartupNotifications(RenderMenuContext& ctx)
         state.postDone = true;
     }
 
+    // RE Engine without REFramework (dinput8.dll): warn once, loading may crash otherwise.
+    if (state.reframeworkMissing && !state.reframeworkNoticeShown)
+    {
+        ImGuiToast notification { ImGuiToastType::Warning, 15000 };
+        notification.setTitle("RE Engine: REFramework no detectado");
+        notification.setContent("Este juego puede requerir REFramework (dinput8.dll) para que OptiScaler no crashee "
+                                "al cargar.\nDescárgalo de github.com/praydog/REFramework o del fork de onehoon.");
+        ImGui::InsertNotification(notification);
+        state.reframeworkNoticeShown = true;
+    }
+
     // Initialize splash timing and select the splash text once per process.
     if (splashLimit < 1.0f)
     {
@@ -2311,6 +2322,15 @@ void MenuCommon::RenderMainMenuHeaderMessages(RenderMenuContext& ctx)
         //    ImGui::TextColored(toneMapColor(ImVec4(1.f, 0.4f, 0.f, 1.f)), "%s", versionStatus.error.c_str());
         //    ImGui::Spacing();
         //}
+    }
+
+    // Persistent warning while a RE Engine game is missing REFramework (dinput8.dll)
+    if (state.reframeworkMissing)
+    {
+        ImGui::Spacing();
+        ImGui::TextColored(toneMapColor(ImVec4(1.f, 0.8f, 0.f, 1.f)),
+                           "RE Engine: REFramework no detectado (falta dinput8.dll)");
+        ImGui::Spacing();
     }
 
     // No active upscaler message

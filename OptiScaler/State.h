@@ -132,6 +132,11 @@ class State
     std::string gameVersion;
     GameEngineType gameEngine = GameEngineType::Other;
 
+    // RE Engine detection + REFramework (dinput8.dll) presence in the game folder
+    bool isREEngine = false;
+    bool reframeworkMissing = false;
+    bool reframeworkNoticeShown = false;
+
     bool nvngxDx11Inited = false;
     bool nvngxDx12Inited = false;
     bool nvngxVkInited = false;
