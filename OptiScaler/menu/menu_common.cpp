@@ -3492,6 +3492,45 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                         config->FGDLSSGQualityGuard = qGuard;
                     }
                     ShowHelpMarker("Prevents flickering and ghosting in 3X/4X multi-frame modes by filtering incompatible HUD separation tags");
+
+                    int boundaryMode = config->FGDLSSGBoundaryMitigation.value_or_default();
+                    if (boundaryMode < 0 || boundaryMode > 2)
+                        boundaryMode = 1;
+
+                    const char* boundaryModes[] = {
+                        "Off (provider rejection)",
+                        "Balanced (recommended)",
+                        "Aggressive (experimental)"
+                    };
+
+                    ImGui::PushItemWidth(175.0f * menuResScale);
+                    if (ImGui::BeginCombo("Boundary mitigation (restart)", boundaryModes[boundaryMode]))
+                    {
+                        for (int i = 0; i <= 2; i++)
+                        {
+                            if (ImGui::Selectable(boundaryModes[i], boundaryMode == i))
+                            {
+                                config->FGDLSSGBoundaryMitigation = i;
+                                state.fgChanged = true;
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::PopItemWidth();
+                    ShowHelpMarker("Conditions the interpolation kernel's added retention on same-depth,\n"
+                                   "motion-coherent local support to reduce foreground/background bleeding\n"
+                                   "and silhouette stretching. Ported from mavismmg 1.0; needs a 310.x\n"
+                                   "DLSSG runtime and applies at the next start.");
+
+                    const auto& mfgStatus = MfgUnlock::LastStatus();
+                    if (mfgStatus.ModuleFound)
+                    {
+                        if (mfgStatus.BoundaryMitigationPatches > 0)
+                            ImGui::TextDisabled("Boundary mitigation applied to %u descriptor(s).",
+                                                mfgStatus.BoundaryMitigationPatches);
+                        else if (boundaryMode != 0)
+                            ImGui::TextDisabled("Boundary mitigation unavailable for this runtime.");
+                    }
                 }
                 else
                 {

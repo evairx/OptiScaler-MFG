@@ -578,32 +578,40 @@ struct Patch
 std::vector<Patch> g_patches;
 void* g_allocation = nullptr;
 
-// Replaces the temporal kernel fatbin in every descriptor that references it,
-// redirecting all of them because we cannot tell which one the runtime picks.
-unsigned int ApplyMidpointFix(HMODULE module, std::string& detail)
+struct TemporalTarget
 {
+    std::vector<uint64_t*> slots;
+    const uint8_t* fat = nullptr;
+    size_t fatSize = 0;
+    const TemporalProfile* profile = nullptr;
+};
+
+// Walks the module's read-only mapped sections for descriptor slots that reference a
+// supported temporal-kernel fatbin. Accept decides, per container and profile, whether that
+// container carries the program being looked for; the first accepted container wins and every
+// slot that points at it is collected. Ambiguous layouts stay untouched.
+template <typename Accept>
+bool FindTemporalTarget(HMODULE module, TemporalTarget& target, Accept&& accept, std::string& why)
+{
+    target = {};
+
     auto* base = reinterpret_cast<uint8_t*>(module);
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
     if (dos->e_magic != IMAGE_DOS_SIGNATURE)
     {
-        detail = "module is not a PE image";
-        return 0;
+        why = "module is not a PE image";
+        return false;
     }
 
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE)
     {
-        detail = "module has no NT headers";
-        return 0;
+        why = "module has no NT headers";
+        return false;
     }
 
     const size_t imageSize = nt->OptionalHeader.SizeOfImage;
     const auto start = reinterpret_cast<uintptr_t>(base);
-
-    std::vector<uint64_t*> slots;
-    const uint8_t* fat = nullptr;
-    size_t fatSize = 0;
-    const TemporalProfile* selectedProfile = nullptr;
 
     const auto* section = IMAGE_FIRST_SECTION(nt);
     for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section)
@@ -659,34 +667,48 @@ unsigned int ApplyMidpointFix(HMODULE module, std::string& detail)
             if (total > start + imageSize - value)
                 continue;
 
-            const auto* fatProfile = FindTemporalProfile(candidate, total);
-            if (fatProfile == nullptr || fatProfile != nameProfile)
-                continue;
-
-            if (fat == nullptr)
+            if (target.fat == nullptr)
             {
-                fat = candidate;
-                fatSize = total;
-                selectedProfile = fatProfile;
+                if (!accept(candidate, total, *nameProfile))
+                    continue;
+
+                target.fat = candidate;
+                target.fatSize = total;
+                target.profile = nameProfile;
             }
-            else if (candidate != fat)
+            else if (candidate != target.fat)
             {
                 continue; // a second temporal-looking kernel; leave it alone
             }
 
-            slots.push_back(reinterpret_cast<uint64_t*>(sec + off));
+            target.slots.push_back(reinterpret_cast<uint64_t*>(sec + off));
         }
     }
 
-    if (fat == nullptr || slots.empty() || selectedProfile == nullptr)
+    if (target.fat == nullptr || target.slots.empty() || target.profile == nullptr)
     {
-        detail = "no supported temporal-kernel descriptor found";
-        return 0;
+        why = "no supported temporal-kernel descriptor found";
+        return false;
     }
+
+    return true;
+}
+
+// Replaces the temporal kernel fatbin in every descriptor that references it,
+// redirecting all of them because we cannot tell which one the runtime picks.
+unsigned int ApplyMidpointFix(HMODULE module, std::string& detail)
+{
+    TemporalTarget target;
+    const bool found = FindTemporalTarget(module, target,
+                                          [](const uint8_t* fat, size_t fatSize, const TemporalProfile& profile)
+                                          { return FindTemporalProfile(fat, fatSize) == &profile; },
+                                          detail);
+    if (!found)
+        return 0;
 
     std::vector<uint8_t> rebuilt;
     std::string why;
-    if (!BuildTemporalFatbin(fat, fatSize, *selectedProfile, rebuilt, why))
+    if (!BuildTemporalFatbin(target.fat, target.fatSize, *target.profile, rebuilt, why))
     {
         detail = why;
         return 0;
@@ -700,7 +722,7 @@ unsigned int ApplyMidpointFix(HMODULE module, std::string& detail)
     }
     std::memcpy(mem, rebuilt.data(), rebuilt.size());
 
-    for (uint64_t* slot : slots)
+    for (uint64_t* slot : target.slots)
     {
         if (!IsInsideSection(module, reinterpret_cast<uintptr_t>(slot), sizeof(uint64_t), nullptr))
             continue;
@@ -725,10 +747,346 @@ unsigned int ApplyMidpointFix(HMODULE module, std::string& detail)
 
     g_allocation = mem;
     detail = std::format("redirected {} {} descriptor(s) from a {}-byte fatbin to a {}-byte temporal-corrected rebuild",
-                         g_patches.size(), selectedProfile->descriptorName, fatSize, rebuilt.size());
+                         g_patches.size(), target.profile->descriptorName, target.fatSize, rebuilt.size());
     return static_cast<unsigned int>(g_patches.size());
 }
 } // namespace midpoint
+
+// ---------------------------------------------------------------------------
+// Boundary artifact mitigation, ported from mavismmg/MFGAdaUnlock-RenoDx 1.0 (MIT).
+//
+// Upstream compiles guarded variants of the sm_120 Kernel_EstimateIntermMvecsScatter
+// program with ptxas and replaces the Ada cubin payload in place, matched by exact
+// cubin fingerprint and hash. This build ships no NVIDIA payload and has no assembler,
+// so the same PTX program is injected at runtime into the provider's own sm_120
+// program, retargeted for sm_89 and handed to the driver JIT through the same
+// descriptor redirect the temporal fallback uses. Every anchor and declaration is
+// required to match exactly once, or nothing is redirected.
+//
+// Balanced conditions the added intermediate retention on at most one same-depth,
+// motion-coherent cardinal neighbor. Aggressive requires more than one full
+// neighbor-equivalent of support and never relaxes below 0.75 of the native divisor.
+// Support zero restores the provider's own rejection in both modes.
+// ---------------------------------------------------------------------------
+namespace boundary
+{
+using midpoint::FindTemporalTarget;
+using midpoint::kFatbinMagic;
+using midpoint::kOuterHeader;
+using midpoint::kPtxKind;
+using midpoint::Lz4BlockDecompress;
+using midpoint::ReadU16;
+using midpoint::ReadU32;
+using midpoint::ReadU64;
+using midpoint::TemporalProfile;
+using midpoint::TemporalTarget;
+
+constexpr int kBalanced = 1;
+constexpr int kAggressive = 2;
+constexpr uint32_t kGuardArch = 120;
+
+std::vector<midpoint::Patch> g_patches;
+void* g_allocation = nullptr;
+
+struct Direction
+{
+    const char* anchor;
+    const char* center[3];
+    const char* neighbors[4][3];
+    const char* length; // squared motion length for this direction
+    bool reloadDivisor; // re-read the native divisor before scaling it
+};
+
+constexpr Direction kDirections[] = {
+    { "fma.rn.ftz.f32 %f14, %f7, %f7, %f157;\n",
+      { "%f7", "%f8", "%f9" },
+      { { "%f55", "%f56", "%f57" }, { "%f78", "%f79", "%f80" }, { "%f97", "%f98", "%f99" }, { "%f120", "%f121", "%f122" } },
+      "%f14",
+      false },
+    { "fma.rn.ftz.f32 %f22, %f15, %f15, %f942;\n",
+      { "%f15", "%f16", "%f17" },
+      { { "%f840", "%f841", "%f842" }, { "%f863", "%f864", "%f865" }, { "%f882", "%f883", "%f884" }, { "%f905", "%f906", "%f907" } },
+      "%f22",
+      true },
+};
+
+struct Source
+{
+    const uint8_t* fat = nullptr;
+    size_t fatSize = 0;
+    size_t entry = 0;
+    uint32_t entryHeader = 0;
+    std::string text;
+    std::string parameterName;
+};
+
+bool ReplaceOnce(std::string& text, std::string_view from, std::string_view to, const char* label, std::string& why)
+{
+    const size_t at = text.find(from);
+    if (at == std::string::npos)
+    {
+        why = std::format("{} not found", label);
+        return false;
+    }
+
+    if (text.find(from, at + 1) != std::string::npos)
+    {
+        why = std::format("{} is not unique", label);
+        return false;
+    }
+
+    text.replace(at, from.size(), to);
+    return true;
+}
+
+// The guarded program, transcribed from upstream's PTX variant generator.
+std::string GuardProgram(const Direction& direction, bool aggressive, const std::string& parameterName)
+{
+    const char* depthLimit = aggressive ? "0f40000000" : "0f40400000";
+
+    std::string program = std::format("// MFGUNLOCK_BOUNDARY_GUARD_{}_V1_{}\n",
+                                      aggressive ? "AGGRESSIVE" : "BALANCED",
+                                      direction.reloadDivisor ? "PREV_TO_CURR" : "CURR_TO_PREV");
+
+    if (direction.reloadDivisor)
+        program += "ld.param.f32 %f2, [" + parameterName + "+120];\n";
+
+    program += "mov.f32 %qgf0, 0f00000000;\n";
+    program += std::format("div.approx.ftz.f32 %qgf2, {}, %f2;\n", direction.length);
+    program += "max.ftz.f32 %qgf2, %qgf2, 0f3F800000;\n";
+
+    for (const auto& neighbor : direction.neighbors)
+    {
+        program += std::format("sub.ftz.f32 %qgf3, {}, {};\n", neighbor[0], direction.center[0]);
+        program += std::format("sub.ftz.f32 %qgf4, {}, {};\n", neighbor[1], direction.center[1]);
+        program += "mul.ftz.f32 %qgf5, %qgf4, %qgf4;\n";
+        program += "fma.rn.ftz.f32 %qgf5, %qgf3, %qgf3, %qgf5;\n";
+        program += "div.approx.ftz.f32 %qgf6, %qgf5, %qgf2;\n";
+        program += "sub.ftz.f32 %qgf6, 0f3F800000, %qgf6;\n";
+        program += "setp.gt.f32 %qgp0, %qgf6, 0f00000000;\n";
+        program += std::format("sub.ftz.f32 %qgf7, {}, {};\n", neighbor[2], direction.center[2]);
+        program += "abs.ftz.f32 %qgf7, %qgf7;\n";
+        program += std::format("setp.lt.and.f32 %qgp0, %qgf7, {}, %qgp0;\n", depthLimit);
+        program += "@!%qgp0 mov.f32 %qgf6, 0f00000000;\n";
+
+        if (aggressive)
+        {
+            program += "add.f32 %qgf0, %qgf0, %qgf6;\n";
+        }
+        else
+        {
+            program += "min.ftz.f32 %qgf6, %qgf6, 0f3F800000;\n";
+            program += "max.f32 %qgf0, %qgf0, %qgf6;\n";
+        }
+    }
+
+    if (aggressive)
+    {
+        program += "sub.f32 %qgf0, %qgf0, 0f3F800000;\n";
+        program += "max.f32 %qgf0, %qgf0, 0f00000000;\n";
+        program += "min.f32 %qgf0, %qgf0, 0f3F800000;\n";
+        program += "mul.f32 %qgf0, %qgf0, %qgf0;\n";
+        program += "fma.rn.f32 %qgf11, %qgf0, 0fBE800000, 0f3F800000;\n";
+    }
+    else
+    {
+        program += "fma.rn.f32 %qgf11, %qgf0, 0fBF000000, 0f3F800000;\n";
+    }
+
+    program += "mul.ftz.f32 %f2, %f2, %qgf11;\n";
+    return program;
+}
+
+// Pulls the sm_120 program out of the container. The guard anchors only exist in that
+// program; the Ada one uses different registers, so this is the upstream source.
+bool ExtractSource(const uint8_t* fat, size_t fatSize, const TemporalProfile& profile, Source& source,
+                   std::string& why)
+{
+    if (fatSize < kOuterHeader || ReadU32(fat) != kFatbinMagic)
+    {
+        why = "container is not a fatbin";
+        return false;
+    }
+
+    const size_t entry = kOuterHeader;
+    if (entry + 64 > fatSize || ReadU16(fat + entry) != kPtxKind ||
+        ReadU32(fat + entry + 28) != kGuardArch)
+    {
+        why = "container has no leading sm_120 PTX program";
+        return false;
+    }
+
+    const uint32_t entryHeader = ReadU32(fat + entry + 4);
+    const uint32_t compressed = ReadU32(fat + entry + 16);
+    const uint64_t payload = ReadU64(fat + entry + 8);
+    const uint64_t raw = ReadU64(fat + entry + 56);
+    if (entryHeader < 64 || payload == 0 || compressed > payload || entry + entryHeader + payload > fatSize)
+    {
+        why = "sm_120 PTX entry is malformed";
+        return false;
+    }
+
+    std::string text;
+    if (compressed != 0)
+    {
+        if (raw == 0 || raw > (8u << 20))
+        {
+            why = "sm_120 PTX entry is not shaped as expected";
+            return false;
+        }
+
+        text.resize(static_cast<size_t>(raw));
+        if (!Lz4BlockDecompress(fat + entry + entryHeader, compressed,
+                                reinterpret_cast<uint8_t*>(text.data()), text.size()))
+        {
+            why = "sm_120 PTX decompression failed";
+            return false;
+        }
+    }
+    else
+    {
+        text.assign(reinterpret_cast<const char*>(fat + entry + entryHeader), static_cast<size_t>(payload));
+    }
+
+    while (!text.empty() && text.back() == '\0')
+        text.pop_back();
+    text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+
+    source.fat = fat;
+    source.fatSize = fatSize;
+    source.entry = entry;
+    source.entryHeader = entryHeader;
+    source.text = std::move(text);
+    source.parameterName = std::string(profile.entryName) + "_param_0";
+    return true;
+}
+
+// Retargets the guarded program for sm_89 and re-emits a truncated fatbin that ends
+// after it, so the runtime has no precompiled cubin to prefer over the JIT.
+bool BuildGuardFatbin(const Source& source, bool aggressive, std::vector<uint8_t>& out, std::string& why)
+{
+    std::string text = source.text;
+
+    const std::string parameter = ".param .align 8 .b8 " + source.parameterName + "[144]";
+    if (text.find(parameter) == std::string::npos)
+    {
+        why = "temporal parameter signature changed";
+        return false;
+    }
+
+    const std::string divisorLoad = "ld.param.f32 %f2, [" + source.parameterName + "+120];\n";
+    if (text.find(divisorLoad) == std::string::npos)
+    {
+        why = "motion-consistency divisor load changed";
+        return false;
+    }
+
+    if (!ReplaceOnce(text, ".target sm_120", ".target sm_89 ", "target directive", why))
+        return false;
+
+    if (!ReplaceOnce(text, ".reg .pred %p<656>;\n",
+                     ".reg .pred %p<656>;\n.reg .pred %qgp<2>;\n.reg .f32 %qgf<12>;\n",
+                     "guard register declaration", why))
+        return false;
+
+    for (const auto& direction : kDirections)
+    {
+        const std::string program = GuardProgram(direction, aggressive, source.parameterName);
+        if (!ReplaceOnce(text, direction.anchor, std::string(direction.anchor) + program, "guard anchor", why))
+            return false;
+    }
+
+    const size_t padded = (text.size() + 7) & ~size_t { 7 };
+    const size_t finalSize = source.entry + source.entryHeader + padded;
+
+    out.assign(source.fat, source.fat + source.entry + source.entryHeader);
+    out.resize(finalSize, 0);
+    std::memcpy(out.data() + source.entry + source.entryHeader, text.data(), text.size());
+
+    const uint64_t payload64 = padded;
+    const uint32_t zero32 = 0;
+    const uint32_t arch = 89;
+    const uint64_t zero64 = 0;
+    std::memcpy(out.data() + source.entry + 8, &payload64, sizeof(payload64));
+    std::memcpy(out.data() + source.entry + 16, &zero32, sizeof(zero32));
+    std::memcpy(out.data() + source.entry + 28, &arch, sizeof(arch));
+    std::memcpy(out.data() + source.entry + 40, &midpoint::kUncompressedFlags, sizeof(midpoint::kUncompressedFlags));
+    std::memcpy(out.data() + source.entry + 56, &zero64, sizeof(zero64));
+
+    const uint64_t outer = finalSize - kOuterHeader;
+    std::memcpy(out.data() + 8, &outer, sizeof(outer));
+    return true;
+}
+
+// Redirects every descriptor that references the temporal kernel to a fatbin carrying
+// the guarded program. The allocation is never freed once a slot points at it.
+unsigned int Apply(HMODULE module, int mode, std::string& detail)
+{
+    if (mode != kBalanced && mode != kAggressive)
+    {
+        detail = "mode is off";
+        return 0;
+    }
+
+    Source source;
+    std::string sourceWhy;
+    TemporalTarget target;
+    std::string scanWhy;
+    const auto accept = [&source, &sourceWhy](const uint8_t* fat, size_t fatSize, const TemporalProfile& profile)
+    { return ExtractSource(fat, fatSize, profile, source, sourceWhy); };
+
+    if (!FindTemporalTarget(module, target, accept, scanWhy))
+    {
+        detail = sourceWhy.empty() ? scanWhy : sourceWhy;
+        return 0;
+    }
+
+    std::vector<uint8_t> rebuilt;
+    std::string why;
+    if (!BuildGuardFatbin(source, mode == kAggressive, rebuilt, why))
+    {
+        detail = why;
+        return 0;
+    }
+
+    void* mem = VirtualAlloc(nullptr, rebuilt.size(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (mem == nullptr)
+    {
+        detail = "allocation failed";
+        return 0;
+    }
+    std::memcpy(mem, rebuilt.data(), rebuilt.size());
+
+    for (uint64_t* slot : target.slots)
+    {
+        if (!IsInsideSection(module, reinterpret_cast<uintptr_t>(slot), sizeof(uint64_t), nullptr))
+            continue;
+
+        DWORD oldProtect = 0;
+        if (VirtualProtect(slot, sizeof(uint64_t), PAGE_READWRITE, &oldProtect) == 0)
+            continue;
+
+        g_patches.push_back({ slot, *slot });
+        *slot = reinterpret_cast<uint64_t>(mem);
+
+        DWORD ignored = 0;
+        VirtualProtect(slot, sizeof(uint64_t), oldProtect, &ignored);
+    }
+
+    if (g_patches.empty())
+    {
+        VirtualFree(mem, 0, MEM_RELEASE);
+        detail = "no descriptor slot was writable";
+        return 0;
+    }
+
+    g_allocation = mem;
+    detail = std::format("redirected {} {} descriptor(s) to the {} boundary guard program",
+                         g_patches.size(), target.profile->descriptorName,
+                         mode == kAggressive ? "aggressive" : "balanced");
+    return static_cast<unsigned int>(g_patches.size());
+}
+} // namespace boundary
 
 std::string Hex(const uint8_t* bytes, size_t count)
 {
@@ -1006,9 +1364,30 @@ void MfgUnlock::TryApply(HMODULE requestedModule)
         {
             g_status.KernelsRewritten = RewriteBlackwellKernels(module);
 
-            // No Blackwell image to retarget: correct the Ada kernel's blend weights directly so
-            // 3X/4X produce frames at their own temporal positions instead of repeated midpoints.
-            if (g_status.KernelsRewritten == 0)
+            // Boundary artifact mitigation conditions the motion-vector kernel's own
+            // consistency divisor on same-depth local support. It supersedes the temporal
+            // fallback for that kernel: the guarded program is the sm_120 one, which already
+            // answers the temporal parameter.
+            const int boundaryMode = Config::Instance()->FGDLSSGBoundaryMitigation.value_or_default();
+            if (boundaryMode == boundary::kBalanced || boundaryMode == boundary::kAggressive)
+            {
+                std::string detail;
+                g_status.BoundaryMitigationMode = boundaryMode;
+                g_status.BoundaryMitigationPatches = boundary::Apply(module, boundaryMode, detail);
+                g_status.BoundaryMitigationDetail = detail;
+
+                if (g_status.BoundaryMitigationPatches > 0)
+                    LOG_INFO("MFG unlock: boundary mitigation ({}) applied: {}",
+                             boundaryMode == boundary::kAggressive ? "aggressive" : "balanced", detail);
+                else
+                    LOG_WARN("MFG unlock: boundary mitigation ({}), using the temporal fallback: {}",
+                             boundaryMode == boundary::kAggressive ? "aggressive" : "balanced", detail);
+            }
+
+            // No Blackwell image to retarget and no guarded program: correct the Ada kernel's
+            // blend weights directly so 3X/4X produce frames at their own temporal positions
+            // instead of repeated midpoints.
+            if (g_status.KernelsRewritten == 0 && g_status.BoundaryMitigationPatches == 0)
             {
                 std::string detail;
                 g_status.TemporalFixPatches = midpoint::ApplyMidpointFix(module, detail);
@@ -1021,7 +1400,8 @@ void MfgUnlock::TryApply(HMODULE requestedModule)
             }
         }
 
-        if (g_status.KernelsRewritten == 0 && g_status.TemporalFixPatches == 0)
+        if (g_status.KernelsRewritten == 0 && g_status.TemporalFixPatches == 0 &&
+            g_status.BoundaryMitigationPatches == 0)
         {
             LOG_WARN("MFG unlock: no compatible interpolation kernels; frame-count gates left unchanged");
             return;
@@ -1042,7 +1422,8 @@ void MfgUnlock::TryApply(HMODULE requestedModule)
 unsigned int MfgUnlock::UnlockedMax()
 {
     const auto& status = LastStatus();
-    const bool contentReady = status.KernelsRewritten > 0 || status.TemporalFixPatches > 0;
+    const bool contentReady = status.KernelsRewritten > 0 || status.TemporalFixPatches > 0 ||
+                              status.BoundaryMitigationPatches > 0;
 
     return status.AdvertiseMatched && status.ValidateMatched && contentReady ? kMaxGeneratedFrames : 0;
 }

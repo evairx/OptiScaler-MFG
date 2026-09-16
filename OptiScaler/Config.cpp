@@ -244,6 +244,10 @@ bool Config::Reload(std::filesystem::path iniPath)
             }
             FGDLSSGAmpereMfgHardwareBilinear.set_from_config(readBool("DLSSG", "AmpereMfgHardwareBilinear"));
             FGDLSSGQualityGuard.set_from_config(readBool("DLSSG", "QualityGuard"));
+            FGDLSSGBoundaryMitigation.set_from_config(readInt("DLSSG", "BoundaryMitigation"));
+            if (FGDLSSGBoundaryMitigation.has_value() &&
+                (FGDLSSGBoundaryMitigation.value() < 0 || FGDLSSGBoundaryMitigation.value() > 2))
+                FGDLSSGBoundaryMitigation.reset();
             FGDLSSGForceFlipMeteringOff.set_from_config(readBool("DLSSG", "ForceFlipMeteringOff"));
             FGDLSSGUseGamesReflexMarkers.set_from_config(readBool("DLSSG", "UseGamesReflexMarkers"));
 
@@ -1108,6 +1112,8 @@ bool Config::SaveIni()
                      GetBoolValue(Instance()->FGDLSSGAmpereMfgHardwareBilinear.value_for_config()).c_str());
         ini.SetValue("DLSSG", "QualityGuard",
                      GetBoolValue(Instance()->FGDLSSGQualityGuard.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "BoundaryMitigation",
+                     GetIntValue(Instance()->FGDLSSGBoundaryMitigation.value_for_config()).c_str());
         ini.SetValue("DLSSG", "ForceFlipMeteringOff",
                      GetBoolValue(Instance()->FGDLSSGForceFlipMeteringOff.value_for_config()).c_str());
         ini.SetValue("DLSSG", "InterpolationCount",

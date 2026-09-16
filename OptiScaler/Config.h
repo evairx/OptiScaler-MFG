@@ -915,6 +915,7 @@ class Config
     CustomOptional<std::string, NoDefault> FGDLSSGAmpereMfgKernelImage;     // Auto / PTX / Cubin
     CustomOptional<bool> FGDLSSGAmpereMfgHardwareBilinear { false };        // Optional approximate sampling (SM86 only)
     CustomOptional<bool> FGDLSSGQualityGuard { true };          // Quality Guard: filters mismatched HUD separation in 3X/4X to prevent flickering
+    CustomOptional<int> FGDLSSGBoundaryMitigation { 1 };        // 0=off, 1=balanced (upstream 1.0 default), 2=aggressive
     CustomOptional<bool> FGDLSSGForceFlipMeteringOff { true };  // Software flip pacing (RSYNC) for Ada multi-frame (prevents presentation freezes and black lines in 3X/4X)
     CustomOptional<int> FGDLSSGInterpolationCount { 1 };        // For Opti's own SL instance
     CustomOptional<bool> FGDLSSGUseGamesReflexMarkers { true };

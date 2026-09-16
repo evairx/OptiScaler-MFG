@@ -48,6 +48,9 @@ struct Status
     unsigned int KernelsRewritten = 0; // Blackwell image retargeted for Ada
     unsigned int TemporalFixPatches = 0; // descriptor slots redirected to the temporal-corrected kernel
     std::string TemporalFixDetail;       // why the temporal fallback applied or failed
+    unsigned int BoundaryMitigationPatches = 0; // descriptor slots redirected to the guarded kernel
+    int BoundaryMitigationMode = 0;             // 0=off, 1=balanced, 2=aggressive for the last attempt
+    std::string BoundaryMitigationDetail;       // why the guard applied or failed
     std::string SnippetVersion; // file version of nvngx_dlssg.dll, empty if it could not be read
 };
 
