@@ -275,7 +275,13 @@ bool XeFG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQu
 
     if (State::Instance().currentFGSwapchain != nullptr && _hwnd == desc->OutputWindow)
     {
-        if (Config::Instance()->FGPreserveSwapChain.value_or_default())
+        const bool preserveSwapchain = Config::Instance()->FGPreserveSwapChain.value_or_default();
+        const bool sameDesc = _haveSwapChainDesc && _swapChainDesc.BufferCount == desc->BufferCount &&
+                              _swapChainDesc.Width == desc->BufferDesc.Width &&
+                              _swapChainDesc.Height == desc->BufferDesc.Height &&
+                              _swapChainDesc.Format == desc->BufferDesc.Format && _swapChainDesc.Flags == desc->Flags;
+
+        if (preserveSwapchain && _swapChainContext != nullptr && sameDesc)
         {
             LOG_WARN("FG swapchain already created for the same output window!");
             auto result = State::Instance().currentFGSwapchain->ResizeBuffers(
@@ -286,10 +292,19 @@ bool XeFG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQu
             return result;
         }
         // Game is creating new swapchain without releasing old one,
-        // we need to release it to avoid errors
-        else if (readyToRelease)
+        // we need to release it to avoid errors.
+        // A preserved swapchain is also released when the game asks for different descriptors or
+        // when the XeFG context is gone: RE Engine recreates the swapchain while loading and
+        // reusing the preserved one leaves the XeFG state desynced.
+        else if (readyToRelease || preserveSwapchain)
         {
-            LOG_INFO("Releasing old swapchain");
+            if (preserveSwapchain)
+                LOG_WARN("Preserved FG swapchain can't be reused for the same output window "
+                         "(context: {}, desc match: {}), releasing and recreating",
+                         _swapChainContext != nullptr, sameDesc);
+            else
+                LOG_INFO("Releasing old swapchain");
+
             ReleaseSwapchain(_hwnd);
 
             // Not sure why but XeFG sometimes doesn't release the swapchain properly
@@ -476,6 +491,8 @@ bool XeFG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQu
     _gameCommandQueue = realQueue;
     _swapChain = *swapChain;
     _hwnd = hwnd;
+    _swapChainDesc = scDesc;
+    _haveSwapChainDesc = true;
 
     return true;
 }
@@ -489,7 +506,12 @@ bool XeFG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
 
     if (State::Instance().currentFGSwapchain != nullptr && _hwnd == hwnd)
     {
-        if (Config::Instance()->FGPreserveSwapChain.value_or_default())
+        const bool preserveSwapchain = Config::Instance()->FGPreserveSwapChain.value_or_default();
+        const bool sameDesc = _haveSwapChainDesc && _swapChainDesc.BufferCount == desc->BufferCount &&
+                              _swapChainDesc.Width == desc->Width && _swapChainDesc.Height == desc->Height &&
+                              _swapChainDesc.Format == desc->Format && _swapChainDesc.Flags == desc->Flags;
+
+        if (preserveSwapchain && _swapChainContext != nullptr && sameDesc)
         {
             LOG_WARN("FG swapchain already created for the same output window!");
             auto result = State::Instance().currentFGSwapchain->ResizeBuffers(
@@ -499,10 +521,19 @@ bool XeFG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
             return result;
         }
         // Game is creating new swapchain without releasing old one,
-        // we need to release it to avoid errors
-        else if (readyToRelease)
+        // we need to release it to avoid errors.
+        // A preserved swapchain is also released when the game asks for different descriptors or
+        // when the XeFG context is gone: RE Engine recreates the swapchain while loading and
+        // reusing the preserved one leaves the XeFG state desynced.
+        else if (readyToRelease || preserveSwapchain)
         {
-            LOG_INFO("Releasing old swapchain");
+            if (preserveSwapchain)
+                LOG_WARN("Preserved FG swapchain can't be reused for the same output window "
+                         "(context: {}, desc match: {}), releasing and recreating",
+                         _swapChainContext != nullptr, sameDesc);
+            else
+                LOG_INFO("Releasing old swapchain");
+
             ReleaseSwapchain(_hwnd);
 
             // Not sure why but XeFG sometimes doesn't release the swapchain properly
@@ -645,6 +676,8 @@ bool XeFG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
     _gameCommandQueue = realQueue;
     _swapChain = *swapChain;
     _hwnd = hwnd;
+    _swapChainDesc = *desc;
+    _haveSwapChainDesc = true;
 
     return true;
 }

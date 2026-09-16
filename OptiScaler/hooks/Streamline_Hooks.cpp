@@ -1075,9 +1075,19 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
 
     auto& state = State::Instance();
 
-    // Disable game's DLSSG when we are trying to create our own instance of DLSSG
-    if (!isOptiScalerSettingDLSSGOptions && state.activeFgInput != FGInput::DLSSG && state.activeFgOutput == FGOutput::DLSSG)
+    // Outputs where OptiScaler generates frames autonomously: the game's native DLSSG must never
+    // run alongside them (DLSSG output shares the Streamline instance; XeFG/FSRFG own the
+    // swapchain/present path). NoFG keeps the native MFG/AF flow untouched.
+    const bool autonomousFgOutput = state.activeFgOutput == FGOutput::DLSSG ||
+                                    state.activeFgOutput == FGOutput::XeFG ||
+                                    state.activeFgOutput == FGOutput::FSRFG;
+
+    // Disable game's DLSSG when we are trying to create our own instance of DLSSG or when an
+    // autonomous output (XeFG/FSRFG) is active
+    if (!isOptiScalerSettingDLSSGOptions && state.activeFgInput != FGInput::DLSSG && autonomousFgOutput)
     {
+        LOG_DEBUG("Forcing game's DLSSG off, OptiScaler owns FG output: {}",
+                  magic_enum::enum_name(state.activeFgOutput));
         newOptions.mode = sl::DLSSGMode::eOff;
         return o_slDLSSGSetOptions(viewport, newOptions);
     }

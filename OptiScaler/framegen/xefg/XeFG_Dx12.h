@@ -21,6 +21,12 @@ class XeFG_Dx12 : public virtual IFGFeature_Dx12
 
     uint32_t _width = 0;
     uint32_t _height = 0;
+
+    // Description the current XeFG swapchain was created with, used to decide if a preserved
+    // swapchain can be reused when the game recreates it for the same window.
+    bool _haveSwapChainDesc = false;
+    DXGI_SWAP_CHAIN_DESC1 _swapChainDesc {};
+
     bool _infiniteDepth = false;
     std::optional<bool> _haveHudless = std::nullopt;
     bool _uiComposition = false;
