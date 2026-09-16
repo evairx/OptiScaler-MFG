@@ -123,7 +123,7 @@ class IFeature
 
     virtual size_t JitterCount() { return _jitterInfo.size(); }
 
-    virtual void TickFrozenCheck();
+    virtual void TickFrozenCheck(uint32_t presentPerEval = 1);
     virtual bool IsFrozen() { return _featureFrozen; };
     virtual bool UpdateOutputResolution(const NVSDK_NGX_Parameter* InParameters);
     virtual unsigned int DisplayWidth() { return _displayWidth; };

@@ -263,7 +263,7 @@ float IFeature::GetSharpness(const NVSDK_NGX_Parameter* InParameters)
     return sharpness;
 }
 
-void IFeature::TickFrozenCheck()
+void IFeature::TickFrozenCheck(uint32_t presentPerEval)
 {
     static long updatesWithoutFramecountChange = 0;
 
@@ -278,7 +278,7 @@ void IFeature::TickFrozenCheck()
 
         lastFrameCount = _frameCount;
 
-        _featureFrozen = updatesWithoutFramecountChange > 10;
+        _featureFrozen = updatesWithoutFramecountChange > (10 * presentPerEval);
     }
 }
 

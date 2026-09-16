@@ -490,7 +490,12 @@ static HRESULT LocalPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
     {
         // Tick feature to let it know if it's frozen
         if (auto currentFeature = State::Instance().currentFeature; currentFeature != nullptr)
-            currentFeature->TickFrozenCheck();
+        {
+            if (auto currentFg = State::Instance().currentFG; currentFg != nullptr)
+                currentFeature->TickFrozenCheck(currentFg->GetInterpolatedFrameCount());
+            else
+                currentFeature->TickFrozenCheck();
+        }
 
         if (cq && (fg == nullptr || !fg->IsActive() || fg->IsPaused()))
             DlssNr::ApplyToFinishedPicture(pSwapChain, cq);

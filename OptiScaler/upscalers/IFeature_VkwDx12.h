@@ -158,10 +158,10 @@ class IFeature_VkwDx12 : public virtual IFeature_Vk
         return CallFeature([](auto f) { return f->JitterCount(); }, size_t {});
     }
 
-    void TickFrozenCheck() override
+    void TickFrozenCheck(uint32_t presentPerEval = 1) override
     {
         if (auto feature = dx12Feature.get(); feature)
-            return feature->TickFrozenCheck();
+            return feature->TickFrozenCheck(presentPerEval);
     };
 
     bool IsFrozen() override
