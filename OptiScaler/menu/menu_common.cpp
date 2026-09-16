@@ -7010,6 +7010,9 @@ void MenuCommon::RenderMainMenuTable(RenderMenuContext& ctx)
         RenderActiveUpscalerSettings(ctx);
         RenderFrameGenerationSelection(ctx);
         RenderFrameGenerationRuntimeSettings(ctx);
+        // Keep the Neural Rendering entry in the left column with the frame-generation controls
+        // (stage 1 placement) so the section stays visible independently of the right column.
+        DlssNr::RenderMenu(ctx.config, ctx.menuResScale);
         RenderFsrCommonSettings(ctx);
         RenderFramerateSettings(ctx);
 #ifdef LOW_LATENCY_INPUTS
@@ -7022,7 +7025,6 @@ void MenuCommon::RenderMainMenuTable(RenderMenuContext& ctx)
 
         // Right column: image quality, initialization, advanced options, appearance, overlay and input settings.
         RenderActiveImageSettings(ctx);
-        DlssNr::RenderMenu(ctx.config, ctx.menuResScale);
         RenderMagnifierSettings(ctx);
         RenderQuirksSettings(ctx);
         RenderAdvancedSettings(ctx);
