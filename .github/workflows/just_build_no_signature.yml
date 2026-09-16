@@ -151,7 +151,7 @@ jobs:
         name: ${{ steps.get_version.outputs.release_name }}
         body_path: RELEASE_NOTES.md
         draft: ${{ !startsWith(github.ref_name, 'optiscaler_dev') }}
-        prerelease: ${{ github.ref_name != 'optiscaler_dev5' }}
+        prerelease: false
         files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
