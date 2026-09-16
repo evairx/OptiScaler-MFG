@@ -1,3 +1,13 @@
+# evairx/OptiScalerMFG dev-6
+
+Work-in-progress base for the next integration round. CI compiles Windows x64 only; nothing is runtime-verified on a GPU.
+
+## Planned for dev-6
+- NR sync from wilsjo2 (release-v0.8.4 memory and pass controls, nr-game-validation retirement, starfield serialization, nr-direct-runtime, nr-init-diagnostics).
+- Small upstream ports (pacing freeze detect for MFG above 2X, DXGI export hardening, _trigger reset, FSRFG checks, UE compat).
+- Optional: mavismmg 1.0 boundary artifact mitigation and silhouette guard.
+- Experimental: sdli1995 0.3.1 for native 6X on RTX 20/30, kept opt-in with the tested X4 fallback untouched.
+
 # evairx/OptiScalerMFG dev-5
 
 Normal release (not a pre-release). CI compiles Windows x64 only; nothing is runtime-verified on a GPU.
@@ -27,3 +37,4 @@ Normal release (not a pre-release). CI compiles Windows x64 only; nothing is run
 - Ada MFG: temporal midpoint correction + transactional patching with rollback, native-module-only targeting.
 - Ampere/Turing: hash-pinned X5/X6 loader patcher with automatic fallback to the proven X4 path.
 - Autonomous FG Output list now only exposes AMD FSR FG 2X and Intel XeSS 3 XeFG.
+

@@ -8,7 +8,7 @@ name: Build (No Signing)
 on:
   workflow_dispatch:
   push:
-    branches: [ "optiscaler_dev5" ]
+    branches: [ "optiscaler_dev5", "optiscaler_dev6" ]
   pull_request:
     branches: [ "master", "main", "optiscaler_dev5" ]
     
@@ -68,7 +68,10 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        if ($env:GITHUB_REF_NAME -eq 'optiscaler_dev5') {
+        if ($env:GITHUB_REF_NAME -eq 'optiscaler_dev6') {
+            $version = "dev-6"
+            $releaseName = "evairx/OptiScalerMFG dev-6"
+        } elseif ($env:GITHUB_REF_NAME -eq 'optiscaler_dev5') {
             $version = "dev-5"
             $releaseName = "evairx/OptiScalerMFG dev-5"
         } else {
