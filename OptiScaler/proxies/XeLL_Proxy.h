@@ -209,7 +209,7 @@ class XeLLProxy
         return true;
 #endif
 
-        // TODO: add hooks to redirect already loaded libxell into dllModule
+        // TODO: add hooks to redirect already loaded libxell into the selected module
 
         HMODULE mainModule = nullptr;
 

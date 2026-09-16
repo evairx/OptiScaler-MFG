@@ -28,6 +28,8 @@ class DLSSG_Dx12 : public virtual IFGFeature_Dx12
     const char* Name() override final { return "DLSSG"; };
     feature_version Version() override final;
     HWND Hwnd() override final;
+    int GetMaxInterpolationCount() const override final;
+    bool GetDMFGSupport() const override final;
 
     // IFGFeature_Dx12
     bool CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQueue, DXGI_SWAP_CHAIN_DESC* desc,

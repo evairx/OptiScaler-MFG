@@ -76,8 +76,6 @@ bool Config::Reload(std::filesystem::path iniPath)
                     FGInput.set_from_config(FGInput::NoFG);
                 else if (lstrcmpiA(FGInputString.value().c_str(), "upscaler") == 0)
                     FGInput.set_from_config(FGInput::Upscaler);
-                else if (lstrcmpiA(FGInputString.value().c_str(), "nvngxfg") == 0)
-                    FGInput.set_from_config(FGInput::NvngxFG);
                 else if (lstrcmpiA(FGInputString.value().c_str(), "dlssg") == 0)
                     FGInput.set_from_config(FGInput::DLSSG);
                 else if (lstrcmpiA(FGInputString.value().c_str(), "fsrfg") == 0)
@@ -85,15 +83,9 @@ bool Config::Reload(std::filesystem::path iniPath)
                 else if (lstrcmpiA(FGInputString.value().c_str(), "fsrfg30") == 0)
                     FGInput.set_from_config(FGInput::FSRFG30);
 
-                if (lstrcmpiA(FGInputString.value().c_str(), "nukems") == 0)
-                {
-                    FGInput.set_from_config(FGInput::NvngxFG);
-                    ini.SetValue("FrameGen", "FGNvngxReplacement", "nukems");
-                }
             }
 
-            if (auto FGOutputString = readString("FrameGen", "FGOutput");
-                FGInput.value_or_default() != FGInput::NvngxFG && FGOutputString.has_value())
+            if (auto FGOutputString = readString("FrameGen", "FGOutput"); FGOutputString.has_value())
             {
                 if (lstrcmpiA(FGOutputString.value().c_str(), "nofg") == 0)
                     FGOutput.set_from_config(FGOutput::NoFG);
@@ -103,24 +95,6 @@ bool Config::Reload(std::filesystem::path iniPath)
                     FGOutput.set_from_config(FGOutput::XeFG);
                 else if (lstrcmpiA(FGOutputString.value().c_str(), "dlssg") == 0)
                     FGOutput.set_from_config(FGOutput::DLSSG);
-            }
-
-            const bool canUseNvngxReplacement =
-                FGInput.value_or_default() == FGInput::NvngxFG || FGOutput.value_or_default() == FGOutput::DLSSG;
-
-            if (auto FGNvngxReplacementString = readString("FrameGen", "FGNvngxReplacement");
-                canUseNvngxReplacement && FGNvngxReplacementString.has_value())
-            {
-                if (lstrcmpiA(FGNvngxReplacementString.value().c_str(), "none") == 0)
-                    FGNvngxReplacement.set_from_config(FGNvngxReplacement::None);
-                else if (lstrcmpiA(FGNvngxReplacementString.value().c_str(), "nukems") == 0)
-                    FGNvngxReplacement.set_from_config(FGNvngxReplacement::Nukems);
-                else if (lstrcmpiA(FGNvngxReplacementString.value().c_str(), "arturs") == 0)
-                    FGNvngxReplacement.set_from_config(FGNvngxReplacement::Arturs);
-                else if (lstrcmpiA(FGNvngxReplacementString.value().c_str(), "ffx") == 0)
-                    FGNvngxReplacement.set_from_config(FGNvngxReplacement::FFX);
-                else if (lstrcmpiA(FGNvngxReplacementString.value().c_str(), "combo") == 0)
-                    FGNvngxReplacement.set_from_config(FGNvngxReplacement::Combo);
             }
 
             if (auto forceXell = readBool("fakenvapi", "ForceXeLL"); forceXell.has_value() && forceXell.value())
@@ -213,8 +187,22 @@ bool Config::Reload(std::filesystem::path iniPath)
 
         {
             FGXeFGInterpolationCount.set_from_config(readInt("XeFG", "InterpolationCount"));
-            if (FGXeFGInterpolationCount.has_value() && FGXeFGInterpolationCount.value() < 1)
+            // Out of range is reset to the default rather than clamped, so an
+            // over-large value would otherwise look like the setting silently
+            // reverting to 2X.
+            if (FGXeFGInterpolationCount.has_value() &&
+                (FGXeFGInterpolationCount.value() < 1 ||
+                 FGXeFGInterpolationCount.value() > XeFGMaxInterpolations))
                 FGXeFGInterpolationCount.reset();
+
+            FGXeFGUnlockEnabled.set_from_config(readBool("XeFG", "UnlockMFG"));
+            FGXeFGMaxInterpolatedFrames.set_from_config(readInt("XeFG", "MaxInterpolatedFrames"));
+            if (FGXeFGMaxInterpolatedFrames.has_value() &&
+                (FGXeFGMaxInterpolatedFrames.value() < 1 ||
+                 FGXeFGMaxInterpolatedFrames.value() > XeFGMaxInterpolations))
+                FGXeFGMaxInterpolatedFrames.reset();
+
+            FGXeFGExtraPacing.set_from_config(readBool("XeFG", "ExtraPacing"));
 
             FGXeFGIgnoreInitChecks.set_from_config(readBool("XeFG", "IgnoreInitChecks"));
             FGXeFGUIComposition.set_from_config(readBool("XeFG", "UIComposition"));
@@ -234,6 +222,29 @@ bool Config::Reload(std::filesystem::path iniPath)
                 (FGDLSSGInterpolationCount.value() < 1 || FGDLSSGInterpolationCount.value() > 6))
                 FGDLSSGInterpolationCount.reset();
 
+            auto adaUnlock = readBool("DLSSG", "AdaMfgUnlock");
+            if (!adaUnlock.has_value())
+                adaUnlock = readBool("DLSSG", "UnlockAdaMFG");
+            FGDLSSGAdaMfgUnlock.set_from_config(adaUnlock);
+            FGDLSSGUnlockAdaMFG.set_from_config(adaUnlock);
+            FGDLSSGAdaBlackwellKernels.set_from_config(readBool("DLSSG", "AdaBlackwellKernels"));
+            FGDLSSGAmpereMfgUnlock.set_from_config(readBool("DLSSG", "AmpereMfgUnlock"));
+            FGDLSSGAmpereMfgMaxFrames.set_from_config(readInt("DLSSG", "AmpereMfgMaxFrames"));
+            if (FGDLSSGAmpereMfgMaxFrames.has_value() &&
+                (FGDLSSGAmpereMfgMaxFrames.value() < 0 || FGDLSSGAmpereMfgMaxFrames.value() > 5))
+                FGDLSSGAmpereMfgMaxFrames.reset();
+            if (auto ampereKernel = readString("DLSSG", "AmpereMfgKernelImage"); ampereKernel.has_value())
+            {
+                if (ampereKernel.value() == "PTX" || ampereKernel.value() == "ptx")
+                    FGDLSSGAmpereMfgKernelImage.set_from_config("PTX");
+                else if (ampereKernel.value() == "Cubin" || ampereKernel.value() == "cubin")
+                    FGDLSSGAmpereMfgKernelImage.set_from_config("Cubin");
+                else
+                    FGDLSSGAmpereMfgKernelImage.set_from_config("Auto");
+            }
+            FGDLSSGAmpereMfgHardwareBilinear.set_from_config(readBool("DLSSG", "AmpereMfgHardwareBilinear"));
+            FGDLSSGQualityGuard.set_from_config(readBool("DLSSG", "QualityGuard"));
+            FGDLSSGForceFlipMeteringOff.set_from_config(readBool("DLSSG", "ForceFlipMeteringOff"));
             FGDLSSGUseGamesReflexMarkers.set_from_config(readBool("DLSSG", "UseGamesReflexMarkers"));
 
             FGDLSSGOverrideInterpolationCount.set_from_config(readInt("DLSSG", "OverrideInterpolationCount"));
@@ -336,6 +347,7 @@ bool Config::Reload(std::filesystem::path iniPath)
             DlssNrTransfer.set_from_config(readUInt("DlssNr", "Transfer"));
 
             DlssNrWhitePointFromExposure.set_from_config(readBool("DlssNr", "WhitePointFromExposure"));
+            DlssNrProbeD3D11.set_from_config(readBool("DlssNr", "ProbeD3D11"));
             DlssNrDebugView.set_from_config(readUInt("DlssNr", "DebugView"));
             DlssNrCompare.set_from_config(readUInt("DlssNr", "Compare"));
             DlssNrCompareSplit.set_from_config(readFloat("DlssNr", "CompareSplit"));
@@ -349,6 +361,8 @@ bool Config::Reload(std::filesystem::path iniPath)
                 DlssNrScalingDownscaler.set_from_config(*v);
             else
                 DlssNrScalingDownscaler.reset();
+            DlssNrProxyProbe.set_from_config(readBool("DlssNr", "ProxyProbe"));
+            DlssNrUseProxy.set_from_config(readBool("DlssNr", "UseProxy"));
             DlssNrScanExposure.set_from_config(readBool("DlssNr", "ScanExposure"));
             DlssNrWhitePointSource.set_from_config(readUInt("DlssNr", "WhitePointSource"));
 
@@ -477,18 +491,6 @@ bool Config::Reload(std::filesystem::path iniPath)
             if (auto setting = readInt("DLSSD", "RenderPresetUltraPerformance");
                 setting.has_value() && setting >= 0 && (setting < presetCount || setting == NV_PRESET_LATEST))
                 DLSSDRenderPresetUltraPerformance.set_from_config(setting);
-        }
-
-        // NvngxFG
-        {
-            if (auto setting = readBool("Nukems", "MakeDepthCopy"); setting.has_value() && setting.value())
-                NvngxFGMakeDepthCopy.set_from_config(setting); // For compat with older config
-            else
-                NvngxFGMakeDepthCopy.set_from_config(readBool("NvngxFG", "MakeDepthCopy"));
-
-            NvngxFGDispatchFlags.set_from_config(readUInt("NvngxFG", "DispatchFlags"));
-            NvngxFGShowDebug.set_from_config(readBool("NvngxFG", "ShowDebug"));
-            NvngxFGDisableHudless.set_from_config(readBool("NvngxFG", "DisableHudless"));
         }
 
         // Logging
@@ -796,8 +798,7 @@ bool Config::Reload(std::filesystem::path iniPath)
             // Enable HAGS when DLSS-G will be used
             if (!SpoofHAGS.has_value())
             {
-                SpoofHAGS.set_volatile_value(FGInput.value_or_default() == FGInput::NvngxFG ||
-                                             FGInput.value_or_default() == FGInput::DLSSG);
+                SpoofHAGS.set_volatile_value(FGInput.value_or_default() == FGInput::DLSSG);
             }
         }
 
@@ -883,8 +884,8 @@ bool Config::Reload(std::filesystem::path iniPath)
             FfxVkPath.set_from_config(readWString("Libraries", "FfxVkPath"));
 
             XeSSLibrary.set_from_config(readWString("Libraries", "XeSSPath"));
-            XeSSLibrary.set_from_config(readWString("Libraries", "XeFGPath"));
-            XeSSLibrary.set_from_config(readWString("Libraries", "XeLLPath"));
+            XeFGLibrary.set_from_config(readWString("Libraries", "XeFGPath"));
+            XeLLLibrary.set_from_config(readWString("Libraries", "XeLLPath"));
             XeSSDx11Library.set_from_config(readWString("Libraries", "XeSSDx11Path"));
         }
 
@@ -987,8 +988,6 @@ bool Config::SaveIni()
                 FGInputString = "NoFG";
             else if (FGInputHeld.value() == FGInput::Upscaler)
                 FGInputString = "Upscaler";
-            else if (FGInputHeld.value() == FGInput::NvngxFG)
-                FGInputString = "NvngxFG";
             else if (FGInputHeld.value() == FGInput::DLSSG)
                 FGInputString = "DLSSG";
             else if (FGInputHeld.value() == FGInput::FSRFG)
@@ -1011,23 +1010,6 @@ bool Config::SaveIni()
                 FGOutputString = "DLSSG";
         }
         ini.SetValue("FrameGen", "FGOutput", FGOutputString.c_str());
-
-        std::string FGNvngxReplacementString = "auto";
-        if (auto FGNvngxReplacementHeld = Instance()->FGNvngxReplacement.value_for_config();
-            FGNvngxReplacementHeld.has_value())
-        {
-            if (FGNvngxReplacementHeld.value() == FGNvngxReplacement::None)
-                FGNvngxReplacementString = "None";
-            else if (FGNvngxReplacementHeld.value() == FGNvngxReplacement::Nukems)
-                FGNvngxReplacementString = "Nukems";
-            else if (FGNvngxReplacementHeld.value() == FGNvngxReplacement::Arturs)
-                FGNvngxReplacementString = "Arturs";
-            else if (FGNvngxReplacementHeld.value() == FGNvngxReplacement::FFX)
-                FGNvngxReplacementString = "FFX";
-            else if (FGNvngxReplacementHeld.value() == FGNvngxReplacement::Combo)
-                FGNvngxReplacementString = "Combo";
-        }
-        ini.SetValue("FrameGen", "FGNvngxReplacement", FGNvngxReplacementString.c_str());
 
         std::optional<int> ftInput;
         if (Instance()->FTInput.has_value())
@@ -1094,6 +1076,10 @@ bool Config::SaveIni()
     {
         ini.SetValue("XeFG", "InterpolationCount",
                      GetIntValue(Instance()->FGXeFGInterpolationCount.value_for_config()).c_str());
+        ini.SetValue("XeFG", "UnlockMFG", GetBoolValue(Instance()->FGXeFGUnlockEnabled.value_for_config()).c_str());
+        ini.SetValue("XeFG", "MaxInterpolatedFrames",
+                     GetIntValue(Instance()->FGXeFGMaxInterpolatedFrames.value_for_config()).c_str());
+        ini.SetValue("XeFG", "ExtraPacing", GetBoolValue(Instance()->FGXeFGExtraPacing.value_for_config()).c_str());
         ini.SetValue("XeFG", "IgnoreInitChecks",
                      GetBoolValue(Instance()->FGXeFGIgnoreInitChecks.value_for_config()).c_str());
         ini.SetValue("XeFG", "UIComposition", GetBoolValue(Instance()->FGXeFGUIComposition.value_for_config()).c_str());
@@ -1106,11 +1092,24 @@ bool Config::SaveIni()
     }
 
     {
-#if defined(OPTISCALER_RTX40_MFG)
-        ini.SetValue("DLSSG", "AdaMfgUnlock", GetBoolValue(Instance()->FGDLSSGAdaMfgUnlock.value_for_config()).c_str());
-#else
-        ini.Delete("DLSSG", "AdaMfgUnlock");
-#endif
+        ini.SetValue("DLSSG", "AdaMfgUnlock",
+                     GetBoolValue(Instance()->FGDLSSGAdaMfgUnlock.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "AdaBlackwellKernels",
+                     GetBoolValue(Instance()->FGDLSSGAdaBlackwellKernels.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "UnlockAdaMFG",
+                     GetBoolValue(Instance()->FGDLSSGAdaMfgUnlock.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "AmpereMfgUnlock",
+                     GetBoolValue(Instance()->FGDLSSGAmpereMfgUnlock.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "AmpereMfgMaxFrames",
+                     GetIntValue(Instance()->FGDLSSGAmpereMfgMaxFrames.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "AmpereMfgKernelImage",
+                     Instance()->FGDLSSGAmpereMfgKernelImage.value_for_config_or("Auto").c_str());
+        ini.SetValue("DLSSG", "AmpereMfgHardwareBilinear",
+                     GetBoolValue(Instance()->FGDLSSGAmpereMfgHardwareBilinear.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "QualityGuard",
+                     GetBoolValue(Instance()->FGDLSSGQualityGuard.value_for_config()).c_str());
+        ini.SetValue("DLSSG", "ForceFlipMeteringOff",
+                     GetBoolValue(Instance()->FGDLSSGForceFlipMeteringOff.value_for_config()).c_str());
         ini.SetValue("DLSSG", "InterpolationCount",
                      GetIntValue(Instance()->FGDLSSGInterpolationCount.value_for_config()).c_str());
         ini.SetValue("DLSSG", "UseGamesReflexMarkers",
@@ -1263,9 +1262,6 @@ bool Config::SaveIni()
                  GetFloatValue(Instance()->DlssNrResidualAcrossRrBlend.value_for_config()).c_str());
     ini.Delete("DlssNr", "ResidualFG");
     ini.Delete("DlssNr", "ResidualFGApproxCamera");
-    ini.Delete("DlssNr", "UseProxy");
-    ini.Delete("DlssNr", "ProxyProbe");
-    ini.Delete("DlssNr", "ProbeD3D11");
     ini.Delete("DlssNr", "Precision"); // Remove the obsolete backend selector from saved configurations.
     {
         auto toggle = Instance()->DlssNrToggleKey.value_for_config();
@@ -1278,6 +1274,8 @@ bool Config::SaveIni()
     ini.SetValue("DlssNr", "MaxRatio", GetFloatValue(Instance()->DlssNrMaxRatio.value_for_config()).c_str());
     ini.SetValue("DlssNr", "Transfer", GetIntValue(Instance()->DlssNrTransfer.value_for_config()).c_str());
 
+    ini.SetValue("DlssNr", "ProbeD3D11",
+                 GetBoolValue(Instance()->DlssNrProbeD3D11.value_for_config()).c_str());
     ini.SetValue("DlssNr", "WhitePointFromExposure",
                  GetBoolValue(Instance()->DlssNrWhitePointFromExposure.value_for_config()).c_str());
     ini.SetValue("DlssNr", "DebugView", GetIntValue(Instance()->DlssNrDebugView.value_for_config()).c_str());
@@ -1308,6 +1306,8 @@ bool Config::SaveIni()
     ini.SetValue("DlssNr", "ScanInverted", GetBoolValue(Instance()->DlssNrScanInverted.value_for_config()).c_str());
     ini.SetValue("DlssNr", "ScanMeter", GetBoolValue(Instance()->DlssNrScanMeter.value_for_config()).c_str());
     ini.SetValue("DlssNr", "Passes", GetIntValue(Instance()->DlssNrPasses.value_for_config()).c_str());
+    ini.SetValue("DlssNr", "UseProxy", GetBoolValue(Instance()->DlssNrUseProxy.value_for_config()).c_str());
+    ini.SetValue("DlssNr", "ProxyProbe", GetBoolValue(Instance()->DlssNrProxyProbe.value_for_config()).c_str());
     // ScanExposure is a developer override with no menu control; persist it so a set ini keeps it.
     ini.SetValue("DlssNr", "ScanExposure", GetBoolValue(Instance()->DlssNrScanExposure.value_for_config()).c_str());
     ini.SetValue("DlssNr", "WhitePointScale",
@@ -1397,17 +1397,6 @@ bool Config::SaveIni()
                      GetIntValue(Instance()->DLSSDRenderPresetPerformance.value_for_config()).c_str());
         ini.SetValue("DLSSD", "RenderPresetUltraPerformance",
                      GetIntValue(Instance()->DLSSDRenderPresetUltraPerformance.value_for_config()).c_str());
-    }
-
-    // NvngxFG
-    {
-        ini.SetValue("NvngxFG", "MakeDepthCopy",
-                     GetBoolValue(Instance()->NvngxFGMakeDepthCopy.value_for_config()).c_str());
-        ini.SetValue("NvngxFG", "DispatchFlags",
-                     GetIntValue(Instance()->NvngxFGDispatchFlags.value_for_config(), true).c_str());
-        ini.SetValue("NvngxFG", "ShowDebug", GetBoolValue(Instance()->NvngxFGShowDebug.value_for_config()).c_str());
-        ini.SetValue("NvngxFG", "DisableHudless",
-                     GetBoolValue(Instance()->NvngxFGDisableHudless.value_for_config()).c_str());
     }
 
     // Sharpness
@@ -1803,7 +1792,6 @@ bool Config::SaveIni()
     // Old configs, just delete them
     {
         ini.Delete("FSR", "Fsr4ForceEnableInt8");
-        ini.Delete("Nukems", "MakeDepthCopy", true);
     }
 
     auto pathWStr = absoluteFileName.wstring();

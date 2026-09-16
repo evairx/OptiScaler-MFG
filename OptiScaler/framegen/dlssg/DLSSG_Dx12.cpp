@@ -1,9 +1,6 @@
 #include "pch.h"
 
 #include "DLSSG_Dx12.h"
-#if defined(OPTISCALER_RTX40_MFG)
-#include "MfgUnlock.h"
-#endif
 
 #include <hudfix/Hudfix_Dx12.h>
 #include <menu/menu_overlay_dx.h>
@@ -16,6 +13,7 @@
 #include <magic_enum.hpp>
 
 #include <DirectXMath.h>
+#include <atomic>
 
 using namespace DirectX;
 
@@ -32,9 +30,24 @@ feature_version DLSSG_Dx12::Version()
 
 HWND DLSSG_Dx12::Hwnd() { return _hwnd; }
 
+int DLSSG_Dx12::GetMaxInterpolationCount() const
+{
+    // OptiFG owns this Streamline instance and is intentionally limited to one
+    // generated frame. Native Streamline MFG is handled by Streamline hooks.
+    return 1;
+}
+
+bool DLSSG_Dx12::GetDMFGSupport() const
+{
+    return _supportsDMFG;
+}
+
 bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQueue, DXGI_SWAP_CHAIN_DESC* desc,
                                  IDXGISwapChain** swapChain, bool readyToRelease)
 {
+    if (!factory || !cmdQueue || !desc || !swapChain || *swapChain != nullptr)
+        return false;
+
     if (State::Instance().currentFGSwapchain != nullptr && _hwnd == desc->OutputWindow)
     {
         if (Config::Instance()->FGPreserveSwapChain.value_or_default())
@@ -94,7 +107,9 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
     IDXGIFactory* slFactory = nullptr;
     if (!Util::CheckForRealObject(__FUNCTION__, factory, (IUnknown**) &slFactory))
     {
-        StreamlineProxy::UpgradeInterface()((void**) &factory);
+        auto upgradeInterface = StreamlineProxy::UpgradeInterface();
+        if (upgradeInterface == nullptr || upgradeInterface((void**) &factory) != sl::Result::eOk || factory == nullptr)
+            return false;
         DxgiFactoryHooks::HookToDLSSGFactory(factory);
     }
     else
@@ -102,16 +117,11 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
         slFactory->Release();
     }
 
+    if (StreamlineProxy::SetFeatureLoaded() == nullptr)
+        return false;
     StreamlineProxy::SetFeatureLoaded()(sl::kFeatureDLSS_G, true);
 
     desc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-    if (State::Instance().gameName == "KCD2")
-    {
-        // KCD2 waits on this handle. Declare application ownership so Streamline
-        // does not also consume it and stall its flip queue.
-        desc->Flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-        LOG_INFO("KCD2: requesting application-owned frame-latency waitable");
-    }
 
     auto result = S_FALSE;
 
@@ -126,20 +136,23 @@ bool DLSSG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
         return false;
     }
 
-#if defined(OPTISCALER_RTX40_MFG)
-    MfgUnlock::TryApply();
-#endif
     sl::DLSSGState dlssgState {};
     sl::DLSSGOptions dlssgOptions {};
-    if (StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
+    if (StreamlineProxy::DLSSGGetState() != nullptr &&
+        StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
     {
         _maxInterpolationCount = dlssgState.numFramesToGenerateMax;
-#if defined(OPTISCALER_RTX40_MFG)
-        _maxInterpolationCount = std::max(_maxInterpolationCount, static_cast<int>(MfgUnlock::UnlockedMax()));
-#endif
-        LOG_INFO("Max supported interpolations: {}", dlssgState.numFramesToGenerateMax);
+        if (_maxInterpolationCount < 1)
+            _maxInterpolationCount = 1;
 
-        _supportsDMFG = dlssgState.bIsDynamicMFGSupported == sl::Boolean::eTrue;
+        LOG_INFO("Max supported interpolations: {}", _maxInterpolationCount);
+
+        if (!_supportsDMFG)
+            _supportsDMFG = dlssgState.bIsDynamicMFGSupported == sl::Boolean::eTrue;
+    }
+    else
+    {
+        _maxInterpolationCount = 1;
     }
 
     _gameCommandQueue = cmdQueue;
@@ -153,6 +166,9 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
                                   DXGI_SWAP_CHAIN_DESC1* desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullscreenDesc,
                                   IDXGISwapChain1** swapChain, bool readyToRelease)
 {
+    if (!factory || !cmdQueue || !desc || !swapChain || *swapChain != nullptr)
+        return false;
+
     if (State::Instance().currentFGSwapchain != nullptr && _hwnd == hwnd)
     {
         if (Config::Instance()->FGPreserveSwapChain.value_or_default())
@@ -229,11 +245,6 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
         StreamlineProxy::SetFeatureLoaded()(sl::kFeatureDLSS_G, true);
 
         desc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-        if (State::Instance().gameName == "KCD2")
-        {
-            desc->Flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-            LOG_INFO("KCD2: requesting application-owned frame-latency waitable");
-        }
         auto result = factory2->CreateSwapChainForHwnd(cmdQueue, hwnd, desc, pFullscreenDesc, nullptr, swapChain);
 
         factory2->Release();
@@ -246,20 +257,23 @@ bool DLSSG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmd
         }
     }
 
-#if defined(OPTISCALER_RTX40_MFG)
-    MfgUnlock::TryApply();
-#endif
     sl::DLSSGState dlssgState {};
     sl::DLSSGOptions dlssgOptions {};
-    if (StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
+    if (StreamlineProxy::DLSSGGetState() != nullptr &&
+        StreamlineProxy::DLSSGGetState()(viewport, dlssgState, &dlssgOptions) == sl::Result::eOk)
     {
         _maxInterpolationCount = dlssgState.numFramesToGenerateMax;
-#if defined(OPTISCALER_RTX40_MFG)
-        _maxInterpolationCount = std::max(_maxInterpolationCount, static_cast<int>(MfgUnlock::UnlockedMax()));
-#endif
-        LOG_INFO("Max supported interpolations: {}", dlssgState.numFramesToGenerateMax);
+        if (_maxInterpolationCount < 1)
+            _maxInterpolationCount = 1;
 
-        _supportsDMFG = dlssgState.bIsDynamicMFGSupported == sl::Boolean::eTrue;
+        LOG_INFO("Max supported interpolations: {}", _maxInterpolationCount);
+
+        if (!_supportsDMFG)
+            _supportsDMFG = dlssgState.bIsDynamicMFGSupported == sl::Boolean::eTrue;
+    }
+    else
+    {
+        _maxInterpolationCount = 1;
     }
 
     _gameCommandQueue = cmdQueue;
@@ -306,15 +320,22 @@ void DLSSG_Dx12::Deactivate()
 
     if (_isActive)
     {
-        sl::DLSSGOptions options {};
+        sl::DLSSGOptions options;
         options.mode = sl::DLSSGMode::eOff;
         options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
-        StreamlineProxy::DLSSGSetOptions()(viewport, options); // Potential crash point on exit
+        if (StreamlineProxy::DLSSGSetOptions() != nullptr)
+        {
+            StreamlineHooks::ScopedOptiScalerDLSSGOptions guard {};
+            StreamlineProxy::DLSSGSetOptions()(viewport, options);
+        }
 
-        sl::ReflexOptions reflexConst = {};
-        reflexConst.mode = sl::ReflexMode::eOff;
-        reflexConst.useMarkersToOptimize = false;
-        StreamlineProxy::ReflexSetOptions()(reflexConst);
+        if (StreamlineProxy::ReflexSetOptions() != nullptr)
+        {
+            sl::ReflexOptions reflexConst = {};
+            reflexConst.mode = sl::ReflexMode::eOff;
+            reflexConst.useMarkersToOptimize = false;
+            StreamlineProxy::ReflexSetOptions()(reflexConst);
+        }
 
         _isActive = false;
     }
@@ -363,49 +384,69 @@ bool DLSSG_Dx12::Dispatch()
 
     auto& state = State::Instance();
 
-    if (Config::Instance()->FGDLSSGInterpolationCount.value_or_default() > _maxInterpolationCount)
+    // OptiFG owns this Streamline instance and is always one generated frame.
+    constexpr int targetCount = 1;
+
+    if (_framesToInterpolate != targetCount)
     {
-        Config::Instance()->FGDLSSGInterpolationCount = _maxInterpolationCount;
-        LOG_WARN("Requested interpolation count is higher than max supported, setting to max: {}",
-                 _maxInterpolationCount);
+        LOG_INFO("Interpolation count changed {} -> {}", _framesToInterpolate, targetCount);
+        _framesToInterpolate = targetCount;
     }
 
-    if (_framesToInterpolate != Config::Instance()->FGDLSSGInterpolationCount.value_or_default())
-    {
-        LOG_INFO("Interpolation count changed {} -> {}", _framesToInterpolate,
-                 Config::Instance()->FGDLSSGInterpolationCount.value_or_default());
-
-        _framesToInterpolate = Config::Instance()->FGDLSSGInterpolationCount.value_or_default();
-    }
-
-    sl::DLSSGOptions options {};
+    sl::DLSSGOptions options;
     options.mode = sl::DLSSGMode::eOn;
     options.numFramesToGenerate = _framesToInterpolate;
     options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
 
-    if (Config::Instance()->FGDLSSGForceDMFG.value_or_default())
+    if (Config::Instance()->FGDLSSGForceDMFG.value_or_default() && _supportsDMFG)
     {
         options.mode = sl::DLSSGMode::eDynamic;
         options.dynamicTargetFrameRate = Config::Instance()->FGDLSSGFramerateTargetDMFG.value_or_default();
     }
-
-    StreamlineHooks::applyMenuDlssgInterlock(options, true);
-    auto dlssgSetOptionsResult = StreamlineProxy::DLSSGSetOptions()(viewport, options);
-
-    if (dlssgSetOptionsResult != sl::Result::eOk)
+    else if (Config::Instance()->FGDLSSGForceDMFG.value_or_default())
     {
-        LOG_ERROR("Couldn't set DLSSG options, error: {}", magic_enum::enum_name(dlssgSetOptionsResult));
+        LOG_WARN("DLSSG: Dynamic MFG was requested but is not reported by the active NVIDIA provider; keeping fixed MFG.");
     }
 
-    sl::ReflexOptions reflexConst = {};
-    reflexConst.mode = sl::ReflexMode::eLowLatency;
-    reflexConst.useMarkersToOptimize = ReflexHooks::gameIsSendingMarkers();
-
-    auto reflexSetOptionsResult = StreamlineProxy::ReflexSetOptions()(reflexConst);
-
-    if (reflexSetOptionsResult != sl::Result::eOk)
+    if (StreamlineProxy::DLSSGSetOptions() != nullptr)
     {
-        LOG_ERROR("Couldn't set Reflex options, error: {}", magic_enum::enum_name(reflexSetOptionsResult));
+        StreamlineHooks::ScopedOptiScalerDLSSGOptions guard {};
+        auto dlssgSetOptionsResult = StreamlineProxy::DLSSGSetOptions()(viewport, options);
+
+        if (dlssgSetOptionsResult != sl::Result::eOk && _framesToInterpolate > 1)
+        {
+            // Mirror the ReShade addon behavior: retry a transient activation
+            // failure once, then restore x2. This is still NVIDIA DLSS-G; no
+            // FSR provider is selected or loaded as a fallback.
+            dlssgSetOptionsResult = StreamlineProxy::DLSSGSetOptions()(viewport, options);
+            if (dlssgSetOptionsResult != sl::Result::eOk)
+            {
+                LOG_WARN("DLSSG: provider rejected {}x MFG twice ({}); falling back to native x2.",
+                         _framesToInterpolate + 1, magic_enum::enum_name(dlssgSetOptionsResult));
+                _framesToInterpolate = 1;
+                options.numFramesToGenerate = 1;
+                dlssgSetOptionsResult = StreamlineProxy::DLSSGSetOptions()(viewport, options);
+            }
+        }
+
+        if (dlssgSetOptionsResult != sl::Result::eOk)
+        {
+            LOG_ERROR("Couldn't set DLSSG options, error: {}", magic_enum::enum_name(dlssgSetOptionsResult));
+        }
+    }
+
+    if (StreamlineProxy::ReflexSetOptions() != nullptr)
+    {
+        sl::ReflexOptions reflexConst = {};
+        reflexConst.mode = sl::ReflexMode::eLowLatency;
+        reflexConst.useMarkersToOptimize = ReflexHooks::gameIsSendingMarkers();
+
+        auto reflexSetOptionsResult = StreamlineProxy::ReflexSetOptions()(reflexConst);
+
+        if (reflexSetOptionsResult != sl::Result::eOk)
+        {
+            LOG_ERROR("Couldn't set Reflex options, error: {}", magic_enum::enum_name(reflexSetOptionsResult));
+        }
     }
 
     if (!_haveHudless.has_value())
@@ -553,8 +594,11 @@ bool DLSSG_Dx12::Dispatch()
 
     auto frameId = static_cast<uint32_t>(willDispatchFrame);
 
+    if (StreamlineProxy::GetNewFrameToken() == nullptr)
+        return false;
+
     auto tokenResult = StreamlineProxy::GetNewFrameToken()(frameToken, &frameId);
-    if (tokenResult != sl::Result::eOk)
+    if (tokenResult != sl::Result::eOk || frameToken == nullptr)
     {
         LOG_ERROR("GetNewFrameToken error: {} ({})", magic_enum::enum_name(tokenResult), (UINT) tokenResult);
 
@@ -564,6 +608,9 @@ bool DLSSG_Dx12::Dispatch()
 
         return false;
     }
+
+    if (StreamlineProxy::SetConstants() == nullptr)
+        return false;
 
     auto result = StreamlineProxy::SetConstants()(constData, *frameToken, viewport);
     if (result != sl::Result::eOk)
@@ -577,6 +624,29 @@ bool DLSSG_Dx12::Dispatch()
         return false;
     }
 
+    if (StreamlineProxy::DLSSGGetState() != nullptr)
+    {
+        sl::DLSSGState dlssgCheckState {};
+        sl::DLSSGOptions dlssgCheckOptions {};
+        if (StreamlineProxy::DLSSGGetState()(viewport, dlssgCheckState, &dlssgCheckOptions) == sl::Result::eOk)
+        {
+            if (dlssgCheckState.status != sl::DLSSGStatus::eOk)
+            {
+                LOG_WARN("DLSSG status warning: 0x{:X}", (uint32_t) dlssgCheckState.status);
+                if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailCommonConstantsInvalid))
+                    LOG_WARN("DLSSG: eFailCommonConstantsInvalid flagged");
+                if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailReflexNotDetectedAtRuntime))
+                    LOG_WARN("DLSSG: eFailReflexNotDetectedAtRuntime flagged");
+                if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailGetCurrentBackBufferIndexNotCalled))
+                    LOG_WARN("DLSSG: eFailGetCurrentBackBufferIndexNotCalled flagged");
+                if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailResolutionTooLow))
+                    LOG_WARN("DLSSG: eFailResolutionTooLow flagged");
+                if ((uint32_t) (dlssgCheckState.status & sl::DLSSGStatus::eFailHDRFormatNotSupported))
+                    LOG_WARN("DLSSG: eFailHDRFormatNotSupported flagged");
+            }
+        }
+    }
+
     LOG_DEBUG("Result: Ok");
 
     return true;
@@ -588,7 +658,19 @@ void* DLSSG_Dx12::SwapchainContext() { return (void*) 0x23372337; }
 
 DLSSG_Dx12::~DLSSG_Dx12() { Shutdown(); }
 
-bool DLSSG_Dx12::SetInterpolatedFrameCount(UINT interpolatedFrameCount) { return true; }
+bool DLSSG_Dx12::SetInterpolatedFrameCount(UINT interpolatedFrameCount)
+{
+    const int maxCount = GetMaxInterpolationCount();
+    int count = static_cast<int>(interpolatedFrameCount);
+    if (count > maxCount)
+        count = maxCount;
+    if (count < 1)
+        count = 1;
+
+    _framesToInterpolate = count;
+    LOG_INFO("DLSSG_Dx12: target interpolated frames set to {}", _framesToInterpolate);
+    return true;
+}
 
 void DLSSG_Dx12::EvaluateState(ID3D12Device* device, FG_Constants& fgConstants)
 {
@@ -886,32 +968,38 @@ bool DLSSG_Dx12::Present()
 
     // if (IsActive() && !IsPaused())
     {
-        if (_uiCommandListResetted[fIndex])
+        auto queue = _gameCommandQueue != nullptr ? _gameCommandQueue : State::Instance().currentCommandQueue;
+
+        if (queue != nullptr)
         {
-            LOG_DEBUG("Executing _uiCommandList[{}]: {:X}", fIndex, (size_t) _uiCommandList[fIndex]);
-            auto closeResult = _uiCommandList[fIndex]->Close();
+            if (_uiCommandListResetted[fIndex])
+            {
+                LOG_DEBUG("Executing _uiCommandList[{}]: {:X}", fIndex, (size_t) _uiCommandList[fIndex]);
+                auto closeResult = _uiCommandList[fIndex]->Close();
 
-            if (closeResult == S_OK)
-                _gameCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList**) &_uiCommandList[fIndex]);
-            else
-                LOG_ERROR("_uiCommandList[{}]->Close() error: {:X}", fIndex, (UINT) closeResult);
+                if (closeResult == S_OK)
+                    queue->ExecuteCommandLists(1, (ID3D12CommandList**) &_uiCommandList[fIndex]);
+                else
+                    LOG_ERROR("_uiCommandList[{}]->Close() error: {:X}", fIndex, (UINT) closeResult);
 
-            _gameCommandQueue->Signal(_uiFence, _uiAllocatorFenceValues[fIndex]);
+                if (_uiFence != nullptr)
+                    queue->Signal(_uiFence, _uiAllocatorFenceValues[fIndex]);
 
-            _uiCommandListResetted[fIndex] = false;
-        }
+                _uiCommandListResetted[fIndex] = false;
+            }
 
-        if (_scCommandListResetted[fIndex])
-        {
-            LOG_DEBUG("Executing _scCommandList[{}]: {:X}", fIndex, (size_t) _scCommandList[fIndex]);
-            auto closeResult = _scCommandList[fIndex]->Close();
+            if (_scCommandListResetted[fIndex])
+            {
+                LOG_DEBUG("Executing _scCommandList[{}]: {:X}", fIndex, (size_t) _scCommandList[fIndex]);
+                auto closeResult = _scCommandList[fIndex]->Close();
 
-            if (closeResult == S_OK)
-                _gameCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList**) &_scCommandList[fIndex]);
-            else
-                LOG_ERROR("_scCommandList[{}]->Close() error: {:X}", fIndex, (UINT) closeResult);
+                if (closeResult == S_OK)
+                    queue->ExecuteCommandLists(1, (ID3D12CommandList**) &_scCommandList[fIndex]);
+                else
+                    LOG_ERROR("_scCommandList[{}]->Close() error: {:X}", fIndex, (UINT) closeResult);
 
-            _scCommandListResetted[fIndex] = false;
+                _scCommandListResetted[fIndex] = false;
+            }
         }
     }
 
@@ -1131,12 +1219,18 @@ bool DLSSG_Dx12::SetResource(Dx12Resource* inputResource)
         {
             auto frameId = static_cast<uint32_t>(_frameCount - indexDiff);
 
+            if (StreamlineProxy::GetNewFrameToken() == nullptr)
+                return false;
+
             auto tokenResult = StreamlineProxy::GetNewFrameToken()(frameToken, &frameId);
-            if (tokenResult != sl::Result::eOk)
+            if (tokenResult != sl::Result::eOk || frameToken == nullptr)
             {
                 LOG_ERROR("GetNewFrameToken error: {} ({})", magic_enum::enum_name(tokenResult), (UINT) tokenResult);
                 return false;
             }
+
+            if (StreamlineProxy::SetTagForFrame() == nullptr)
+                return false;
 
             auto result = StreamlineProxy::SetTagForFrame()(*frameToken, viewport, &resourceTag, 1, fResource->cmdList);
             LOG_DEBUG("SetTagForFrame, frameId: {}, type: {} result: {} ({})", frameId, magic_enum::enum_name(type),

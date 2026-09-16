@@ -6,7 +6,8 @@
 #include "Config.h"
 #include <ankerl/unordered_dense.h>
 #include <misc/IdentifyGpu.h>
-#include <framegen/nvngx/Nvngx_FG.h>
+#include <framegen/dlssg/MfgUnlock.h>
+#include <hooks/Streamline_Hooks.h>
 
 /// @brief Calculates the resolution scaling ratio override based on the provided quality level and current
 /// configuration.
@@ -799,8 +800,8 @@ void InitNGXParameters(NVSDK_NGX_Parameter* InParams, API api)
         InParams->Set("SuperSamplingDenoising.FeatureInitResult", 0);
     }
 
-    if ((api == API::DX12 || api == API::Vulkan) && (State::Instance().activeFgInput == FGInput::DLSSG ||
-                                                     State::Instance().activeFgNvngx != FGNvngxReplacement::None))
+    if ((api == API::DX12 || api == API::Vulkan) && State::Instance().activeFgInput == FGInput::DLSSG &&
+        State::Instance().activeFgOutput == FGOutput::NoFG)
     {
         InParams->Set("FrameGeneration.Available", 1);
         InParams->Set("FrameGeneration.NeedsUpdatedDriver", 0);
@@ -809,9 +810,25 @@ void InitNGXParameters(NVSDK_NGX_Parameter* InParams, API api)
         InParams->Set(NVSDK_NGX_Parameter_FrameInterpolation_NeedsUpdatedDriver, 0);
         InParams->Set(NVSDK_NGX_Parameter_FrameInterpolation_FeatureInitResult, 1);
 
-        // Streamline handle the max interpolated frame count
-        int countMax =
-            State::Instance().activeFgNvngx != FGNvngxReplacement::None ? Nvngx_FG::getMaxFakeFramesCount() : 1;
+        // Advertise multi-frame generation only for a native game's DLSS-G module.
+        uint32_t countMax = 1;
+        if (StreamlineHooks::isNativeDlssgAvailable() &&
+            (Config::Instance()->FGDLSSGAdaMfgUnlock.value_or_default() ||
+             Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default()))
+        {
+            MfgUnlock::TryApply();
+            countMax = MfgUnlock::UnlockedMax();
+            if (countMax == 0)
+                countMax = 5;
+        }
+        else if (StreamlineHooks::isNativeDlssgAvailable() &&
+                 Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default())
+        {
+            int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
+            if (ampereMax < 1 || ampereMax > 5)
+                ampereMax = 3;
+            countMax = static_cast<uint32_t>(ampereMax);
+        }
         InParams->Set("DLSSG.MultiFrameCountMax", countMax);
 
         if (State::Instance().NVNGX_Engine == NVSDK_NGX_ENGINE_TYPE_UNREAL ||

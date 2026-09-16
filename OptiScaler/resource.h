@@ -28,28 +28,16 @@
 
 #define VER_MAJOR_VERSION 10
 #define VER_MINOR_VERSION 0
-#define VER_HOTFIX_VERSION 0
-#define VER_BUILD_NUMBER 1
-
-#define VER_DEV_RELEASE
-// #define VER_PRE_RELEASE
+#define VER_HOTFIX_VERSION 2
+#define VER_BUILD_NUMBER 4
 
 #define VER_FILE_VERSION VER_MAJOR_VERSION, VER_MINOR_VERSION, VER_HOTFIX_VERSION, VER_BUILD_NUMBER
 #define VER_FILE_VERSION_STR                                                                                           \
     STRINGIZE(VER_MAJOR_VERSION) "." STRINGIZE(VER_MINOR_VERSION) "." STRINGIZE(VER_HOTFIX_VERSION) "." STRINGIZE(VER_BUILD_NUMBER)
-#define OPTI_VERSION STRINGIZE(VER_MAJOR_VERSION) "." STRINGIZE(VER_MINOR_VERSION) "." STRINGIZE(VER_HOTFIX_VERSION)
+#define OPTI_VERSION "dev-6"
 
 #define VER_PRODUCT_VERSION VER_FILE_VERSION
 
-#ifdef VER_DEV_RELEASE
-#define VER_PRODUCT_VERSION_STR                                                                                        \
-    STRINGIZE(VER_MAJOR_VERSION) "." STRINGIZE(VER_MINOR_VERSION) "." STRINGIZE(VER_HOTFIX_VERSION) "-dev (" VER_BUILD_COMMIT ") (" VER_BUILD_DATE ")"
-#elif VER_PRE_RELEASE
-#define VER_PRODUCT_VERSION_STR                                                                                        \
-    STRINGIZE(VER_MAJOR_VERSION) "." STRINGIZE(VER_MINOR_VERSION) "." STRINGIZE(VER_HOTFIX_VERSION) "-pre" STRINGIZE(VER_BUILD_NUMBER) " (" VER_BUILD_COMMIT ") (" VER_BUILD_DATE ")"
-#else
-#define VER_PRODUCT_VERSION_STR                                                                                        \
-    STRINGIZE(VER_MAJOR_VERSION) "." STRINGIZE(VER_MINOR_VERSION) "." STRINGIZE(VER_HOTFIX_VERSION) "-final (" VER_BUILD_COMMIT ")"
-#endif // VER_PRE_RELEASE
+#define VER_PRODUCT_VERSION_STR "evairx/optiscaler_dev-1 (no tested)"
 
-#define VER_PRODUCT_NAME "OptiScaler v" VER_PRODUCT_VERSION_STR
+#define VER_PRODUCT_NAME "OptiScaler-MFG " VER_PRODUCT_VERSION_STR

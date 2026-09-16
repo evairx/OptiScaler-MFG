@@ -33,6 +33,7 @@
 
 #include <fsr4/FSR4ModelSelection.h>
 #include <fsr4/FSR4Upgrade.h>
+#include <framegen/dlssg/MfgUnlock.h>
 #include <misc/IdentifyGpu.h>
 #include <low_latency/input/input_uell.h>
 
@@ -60,6 +61,12 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
 
     std::filesystem::path localSlPath(Config::Instance()->MainDllPath.value());
     localSlPath = localSlPath / L"streamline"; // Hardcoded streamline folder
+    if (!std::filesystem::exists(localSlPath))
+    {
+        auto optiSl = std::filesystem::path(Config::Instance()->MainDllPath.value()) / L"OptiScaler" / L"streamline";
+        if (std::filesystem::exists(optiSl))
+            localSlPath = optiSl;
+    }
     auto normalizedLocalSlPath = localSlPath.lexically_normal();
 
     const bool pathInsideLocalSlPath = Util::IsSubpath(path, normalizedLocalSlPath);
@@ -139,8 +146,65 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
             {
                 State::Instance().NGX_OTA_Dlssd = wstring_to_string(lpLibFullPath);
             }
+
+            if (normalizedPath.contains(L"\\dlssg\\") || normalizedPath.contains(L"/dlssg/"))
+            {
+                // OTA model binaries are not the native nvngx_dlssg module and must never be
+                // selected as the target of the in-memory MFG patcher.
+                LOG_TRACE("Loaded DLSS-G OTA model: {}", wstring_to_string(lpLibFullPath));
+            }
         }
         return loadedBin;
+    }
+
+    // Direct nvngx_dlssg.dll load
+    if (normalizedPath.contains(L"nvngx_dlssg"))
+    {
+        std::wstring targetPath = lpLibFullPath;
+
+        // If OptiScaler has its own modern DLSS-G (v310+), prefer it over game's outdated nvngx_dlssg
+        if (State::Instance().NVNGX_DLSSG_Path.has_value() &&
+            std::filesystem::exists(State::Instance().NVNGX_DLSSG_Path.value()))
+        {
+            targetPath = State::Instance().NVNGX_DLSSG_Path.value();
+            LOG_INFO(L"Redirecting nvngx_dlssg.dll load to OptiScaler DLSS-G: {}", targetPath);
+        }
+        else
+        {
+            auto optiDlssg = std::filesystem::path(Config::Instance()->MainDllPath.value()) / L"OptiScaler" / L"nvngx_dlssg.dll";
+            if (std::filesystem::exists(optiDlssg))
+            {
+                targetPath = optiDlssg.wstring();
+                LOG_INFO(L"Redirecting nvngx_dlssg.dll load to OptiScaler DLSS-G: {}", targetPath);
+            }
+        }
+
+        const bool redirectedToOpti = targetPath != lpLibFullPath;
+        auto dlssgModule = NtdllProxy::LoadLibraryExW_Ldr(targetPath.c_str(), NULL, 0);
+        if (dlssgModule == nullptr && redirectedToOpti)
+        {
+            LOG_WARN(L"Failed loading OptiScaler DLSS-G from {}, falling back to original {}", targetPath, lpLibFullPath);
+            dlssgModule = NtdllProxy::LoadLibraryExW_Ldr(lpLibFullPath, NULL, 0);
+        }
+
+        // Any nvngx_dlssg load that reaches here was requested by the game or its
+        // Streamline runtime, so the resulting module is the provider the game will
+        // use - even when the request was redirected to OptiScaler's own modern
+        // copy. Register it so the native MFG flow and its menu know it exists, and
+        // apply the Ada unlock right away (when enabled): the game may query its
+        // multiplier limits before it ever enables DLSS-G on the Streamline hooks.
+        if (dlssgModule != nullptr && StreamlineHooks::registerNativeDlssgModule(dlssgModule))
+        {
+            MfgUnlock::TryApply(dlssgModule);
+
+            // Latch the unlocker state once the Ada patch has landed, so the menu stops
+            // asking for a restart in a session where it already took effect.
+            if (MfgUnlock::UnlockedMax() > 0)
+                State::Instance().activeUnlockAdaMFG = Config::Instance()->FGDLSSGAdaMfgUnlock.value_or(
+                    Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default());
+        }
+
+        return dlssgModule;
     }
 
     // NvApi64.dll
@@ -151,8 +215,7 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
         return LibraryLoadHooks::LoadNvApi();
     }
 
-    // Hook SL from local path if using Nvngx FG (and probably upgrading SL for it)
-    const bool shouldHookSl = !pathInsideLocalSlPath || State::Instance().activeFgInput == FGInput::NvngxFG;
+    const bool shouldHookSl = !pathInsideLocalSlPath;
 
     // sl.interposer.dll
     if (CheckDllNameW(&libName, &slInterposerNamesW) && shouldHookSl)

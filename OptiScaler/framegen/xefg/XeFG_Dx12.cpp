@@ -36,9 +36,26 @@ void XeFG_Dx12::xefgLogCallback(const char* message, xefg_swapchain_logging_leve
 
 bool XeFG_Dx12::CreateSwapchainContext(ID3D12Device* device)
 {
+    if (device == nullptr)
+        return false;
+
     if (XeFGProxy::Module() == nullptr && !XeFGProxy::InitXeFG())
     {
         LOG_ERROR("XeFG proxy can't find libxess_fg.dll!");
+        return false;
+    }
+
+    if (XeFGProxy::GetProperties() == nullptr || XeFGProxy::D3D12InitFromSwapChainDesc() == nullptr ||
+        XeFGProxy::D3D12GetSwapChainPtr() == nullptr)
+    {
+        LOG_ERROR("XeFG runtime is missing required swapchain exports");
+        return false;
+    }
+
+    auto createContext = XeFGProxy::D3D12CreateContext();
+    if (createContext == nullptr)
+    {
+        LOG_ERROR("XeFG runtime is missing xefgSwapChainD3D12CreateContext");
         return false;
     }
 
@@ -50,53 +67,63 @@ bool XeFG_Dx12::CreateSwapchainContext(ID3D12Device* device)
 
     do
     {
-        auto result = XeFGProxy::D3D12CreateContext()(device, &_swapChainContext);
+        auto result = createContext(device, &_swapChainContext);
 
-        if (result != XEFG_SWAPCHAIN_RESULT_SUCCESS)
+        if (result != XEFG_SWAPCHAIN_RESULT_SUCCESS || _swapChainContext == nullptr)
         {
             LOG_ERROR("D3D12CreateContext error: {} ({})", magic_enum::enum_name(result), (UINT) result);
             return false;
         }
 
         LOG_INFO("XeFG context created");
-        result = XeFGProxy::SetLoggingCallback()(_swapChainContext, XEFG_SWAPCHAIN_LOGGING_LEVEL_DEBUG, xefgLogCallback,
-                                                 nullptr);
 
-        if (result != XEFG_SWAPCHAIN_RESULT_SUCCESS)
+        if (auto setLoggingCallback = XeFGProxy::SetLoggingCallback(); setLoggingCallback != nullptr)
         {
-            LOG_ERROR("SetLoggingCallback error: {} ({})", magic_enum::enum_name(result), (UINT) result);
+            result = setLoggingCallback(_swapChainContext, XEFG_SWAPCHAIN_LOGGING_LEVEL_DEBUG, xefgLogCallback, nullptr);
+
+            if (result != XEFG_SWAPCHAIN_RESULT_SUCCESS)
+                LOG_WARN("SetLoggingCallback error: {} ({})", magic_enum::enum_name(result), (UINT) result);
         }
 
 #ifndef LOW_LATENCY_INPUTS
-        // Force fakenvapi to create XeLL for us
+        // Force fakenvapi to create XeLL for us when the optional latency path is available.
         if (fakenvapi::forceMode(device, LowLatencyMode::XeLL))
         {
-            xell_sleep_params_t sleepParams = {};
-            sleepParams.bLowLatencyMode = true;
-            sleepParams.bLowLatencyBoost = false;
-            sleepParams.minimumIntervalUs = 0;
+            auto xellContext = static_cast<xell_context_handle_t>(fakenvapi::getCurrentContext());
+            auto setSleepMode = XeLLProxy::SetSleepMode();
+            auto setLatencyReduction = XeFGProxy::SetLatencyReduction();
 
-            auto xellResult =
-                XeLLProxy::SetSleepMode()((xell_context_handle_t) fakenvapi::getCurrentContext(), &sleepParams);
-            if (xellResult != XELL_RESULT_SUCCESS)
+            if (xellContext != nullptr && setSleepMode != nullptr && setLatencyReduction != nullptr)
             {
-                LOG_ERROR("SetSleepMode error: {} ({})", magic_enum::enum_name(xellResult), (UINT) xellResult);
-                return false;
+                xell_sleep_params_t sleepParams = {};
+                sleepParams.bLowLatencyMode = true;
+                sleepParams.bLowLatencyBoost = false;
+                sleepParams.minimumIntervalUs = 0;
+
+                auto xellResult = setSleepMode(xellContext, &sleepParams);
+                if (xellResult == XELL_RESULT_SUCCESS)
+                {
+                    result = setLatencyReduction(_swapChainContext, xellContext);
+                    if (result != XEFG_SWAPCHAIN_RESULT_SUCCESS)
+                        LOG_WARN("SetLatencyReduction error: {} ({})", magic_enum::enum_name(result), (UINT) result);
+                }
+                else
+                {
+                    LOG_WARN("SetSleepMode error: {} ({})", magic_enum::enum_name(xellResult), (UINT) xellResult);
+                }
             }
-
-            result = XeFGProxy::SetLatencyReduction()(_swapChainContext, fakenvapi::getCurrentContext());
-
-            if (result != XEFG_SWAPCHAIN_RESULT_SUCCESS)
+            else
             {
-                LOG_ERROR("SetLatencyReduction error: {} ({})", magic_enum::enum_name(result), (UINT) result);
-                return false;
+                LOG_WARN("XeLL latency reduction unavailable; continuing without it");
             }
         }
 #else
-        InputXeLL::xell_input_handle_t localXellContext;
-        if (InputXeLL::D3D12CreateContext(device, &localXellContext) == XELL_RESULT_SUCCESS)
+        InputXeLL::xell_input_handle_t localXellContext = nullptr;
+        auto setLatencyReduction = XeFGProxy::SetLatencyReduction();
+        if (setLatencyReduction != nullptr && InputXeLL::D3D12CreateContext(device, &localXellContext) == XELL_RESULT_SUCCESS &&
+            localXellContext != nullptr)
         {
-            localXellContext->inputContext.localContext = true; // We created this context
+            localXellContext->inputContext.localContext = true;
 
             xell_sleep_params_t sleepParams = {};
             sleepParams.bLowLatencyMode = true;
@@ -104,27 +131,22 @@ bool XeFG_Dx12::CreateSwapchainContext(ID3D12Device* device)
             sleepParams.minimumIntervalUs = 0;
 
             auto xellResult = InputXeLL::SetSleepMode(localXellContext, &sleepParams);
-            if (xellResult != XELL_RESULT_SUCCESS)
+            if (xellResult == XELL_RESULT_SUCCESS)
             {
-                LOG_ERROR("SetSleepMode error: {} ({})", magic_enum::enum_name(xellResult), (UINT) xellResult);
-                return false;
+                result = setLatencyReduction(_swapChainContext, (xell_context_handle_t) localXellContext);
+                if (result != XEFG_SWAPCHAIN_RESULT_SUCCESS)
+                    LOG_WARN("SetLatencyReduction error: {} ({})", magic_enum::enum_name(result), (UINT) result);
             }
-
-            result = XeFGProxy::SetLatencyReduction()(_swapChainContext, (xell_context_handle_t) localXellContext);
-
-            if (result != XEFG_SWAPCHAIN_RESULT_SUCCESS)
+            else
             {
-                LOG_ERROR("SetLatencyReduction error: {} ({})", magic_enum::enum_name(result), (UINT) result);
-                return false;
+                LOG_WARN("SetSleepMode error: {} ({})", magic_enum::enum_name(xellResult), (UINT) xellResult);
             }
         }
-#endif
         else
         {
-            LOG_ERROR("Couldn't create XeLL");
-            return false;
+            LOG_WARN("XeLL unavailable; continuing without latency reduction");
         }
-
+#endif
         createResult = true;
 
     } while (false);
@@ -168,10 +190,14 @@ bool XeFG_Dx12::DestroySwapchainContext()
 
     if (_swapChainContext != nullptr && !State::Instance().isShuttingDown)
     {
+        auto destroy = XeFGProxy::Destroy();
+        if (destroy == nullptr)
+            return false;
+
         auto context = _swapChainContext;
         _swapChainContext = nullptr;
 
-        auto result = XeFGProxy::Destroy()(context);
+        auto result = destroy(context);
 
         LOG_INFO("Destroy result: {} ({})", magic_enum::enum_name(result), (UINT) result);
 
@@ -244,6 +270,9 @@ xefg_swapchain_d3d12_resource_data_t XeFG_Dx12::GetResourceData(FG_ResourceType 
 bool XeFG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQueue, DXGI_SWAP_CHAIN_DESC* desc,
                                 IDXGISwapChain** swapChain, bool readyToRelease)
 {
+    if (factory == nullptr || cmdQueue == nullptr || desc == nullptr || swapChain == nullptr || *swapChain != nullptr)
+        return false;
+
     if (State::Instance().currentFGSwapchain != nullptr && _hwnd == desc->OutputWindow)
     {
         if (Config::Instance()->FGPreserveSwapChain.value_or_default())
@@ -365,7 +394,7 @@ bool XeFG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQu
 
     int intTarget = _maxInterpolationCount;
 
-    // For old libxess_fg versions we use max to control interpolation count
+    // Older runtimes use the creation limit; newer runtimes can change it dynamically.
     if (XeFGProxy::SetNumInterpolatedFrames() == nullptr)
         intTarget = Config::Instance()->FGXeFGInterpolationCount.value_or_default();
 
@@ -378,9 +407,6 @@ bool XeFG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQu
 
     if (_framesToInterpolate > intTarget)
         Config::Instance()->FGXeFGInterpolationCount.set_volatile_value(intTarget);
-
-    if (Config::Instance()->ForceXeLL.value_or_default())
-        params.maxInterpolatedFrames = 1;
 
     params.maxInterpolatedFrames = intTarget;
 
@@ -415,9 +441,17 @@ bool XeFG_Dx12::CreateSwapchain(IDXGIFactory* factory, ID3D12CommandQueue* cmdQu
     ScopedSkipSpoofingGlobal skipSpoofingGlobal {};
 #endif // !DONT_USE_XMX
 
+    auto initSwapchain = XeFGProxy::D3D12InitFromSwapChainDesc();
+    auto getSwapchain = XeFGProxy::D3D12GetSwapChainPtr();
+    auto setEnabled = XeFGProxy::SetEnabled();
+    if (initSwapchain == nullptr || getSwapchain == nullptr || setEnabled == nullptr)
+    {
+        LOG_ERROR("XeFG runtime is missing swapchain creation exports");
+        return false;
+    }
+
     xefg_swapchain_result_t result;
-    result = XeFGProxy::D3D12InitFromSwapChainDesc()(_swapChainContext, hwnd, &scDesc, &fsDesc, realQueue, factory12,
-                                                     &params);
+    result = initSwapchain(_swapChainContext, hwnd, &scDesc, &fsDesc, realQueue, factory12, &params);
 
     if (result != XEFG_SWAPCHAIN_RESULT_SUCCESS)
     {
@@ -450,6 +484,9 @@ bool XeFG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
                                  DXGI_SWAP_CHAIN_DESC1* desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullscreenDesc,
                                  IDXGISwapChain1** swapChain, bool readyToRelease)
 {
+    if (factory == nullptr || cmdQueue == nullptr || desc == nullptr || swapChain == nullptr || *swapChain != nullptr)
+        return false;
+
     if (State::Instance().currentFGSwapchain != nullptr && _hwnd == hwnd)
     {
         if (Config::Instance()->FGPreserveSwapChain.value_or_default())
@@ -532,7 +569,7 @@ bool XeFG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
 
     int intTarget = _maxInterpolationCount;
 
-    // For old libxess_fg versions we use max to control interpolation count
+    // Older runtimes use the creation limit; newer runtimes can change it dynamically.
     if (XeFGProxy::SetNumInterpolatedFrames() == nullptr)
         intTarget = Config::Instance()->FGXeFGInterpolationCount.value_or_default();
 
@@ -545,9 +582,6 @@ bool XeFG_Dx12::CreateSwapchain1(IDXGIFactory* factory, ID3D12CommandQueue* cmdQ
 
     if (_framesToInterpolate > intTarget)
         Config::Instance()->FGXeFGInterpolationCount.set_volatile_value(intTarget);
-
-    if (Config::Instance()->ForceXeLL.value_or_default())
-        params.maxInterpolatedFrames = 1;
 
     params.maxInterpolatedFrames = intTarget;
 
@@ -799,12 +833,20 @@ bool XeFG_Dx12::Dispatch()
             auto intResult = XeFGProxy::SetNumInterpolatedFrames()(
                 _swapChainContext, Config::Instance()->FGXeFGInterpolationCount.value_or_default());
 
-            _framesToInterpolate = Config::Instance()->FGXeFGInterpolationCount.value_or_default();
-
-            if (intResult != XEFG_SWAPCHAIN_RESULT_SUCCESS)
+            if (intResult == XEFG_SWAPCHAIN_RESULT_SUCCESS)
             {
-                LOG_ERROR("SetNumInterpolatedFrames error: {} ({})", magic_enum::enum_name(intResult),
-                          (UINT) intResult);
+                _framesToInterpolate = Config::Instance()->FGXeFGInterpolationCount.value_or_default();
+            }
+            else
+            {
+                // The runtime refused the request (for example an unlocked x5/x6 on a runtime that
+                // only accepts less). Keep the last accepted count instead of latching a value the
+                // runtime never agreed to.
+                LOG_ERROR("SetNumInterpolatedFrames error: {} ({}); keeping {}",
+                          magic_enum::enum_name(intResult), (UINT) intResult, _framesToInterpolate);
+
+                Config::Instance()->FGXeFGInterpolationCount.set_volatile_value(
+                    _framesToInterpolate > 0 ? _framesToInterpolate : 1);
             }
         }
     }
@@ -928,10 +970,27 @@ bool XeFG_Dx12::Dispatch()
     else
         constData.resetHistory = false;
 
+    // xefg_swapchain.h documents frameRenderTime as "time that was required to
+    // render current frame in milliseconds", and the provider drives its
+    // generated frame pacing with it. Nothing fills _ftDelta on this backend
+    // though - SetFrameTimeDelta is only wired up for the FSR and Streamline
+    // paths. The old fallback, state.lastFGFrameTime, brackets the whole of the
+    // previous present including the pacing, so above 2X it is self-referential:
+    // the frames are asked to fill a period that only exists because they were
+    // asked to fill it. XeFGPacing measures its own blocking and hands the
+    // period back with that removed; it returns 0 until it has seen a burst.
+    auto frameRenderTime = _ftDelta[fIndex];
+
+    if (!(frameRenderTime > 0.0))
+        frameRenderTime = XeFGPacing::RenderTimeMs();
+
+    if (!(frameRenderTime > 0.0))
+        frameRenderTime = state.lastFGFrameTime;
+
     switch (Config::Instance()->FTInput.value_or_default())
     {
     case FrameTimeSource::Input:
-        constData.frameRenderTime = (float) _ftDelta[fIndex];
+        constData.frameRenderTime = static_cast<float>(frameRenderTime);
         break;
 
     case FrameTimeSource::Opti:
@@ -943,8 +1002,10 @@ bool XeFG_Dx12::Dispatch()
         break;
     }
 
-    LOG_DEBUG("Reset: {}, Opti FT: {}, Source FT: {}, Set FT: {}, Opti Id: {}, Reflex Id: {}", _reset[fIndex],
-              constData.frameRenderTime, _ftDelta[fIndex], constData.frameRenderTime, _frameCount,
+    XeFGPacing::NoteFedFrameTime(constData.frameRenderTime);
+
+    LOG_DEBUG("Reset: {}, Input FT: {}, Opti FT: {}, Set FT: {} ms, Opti Id: {}, Reflex Id: {}", _reset[fIndex],
+              _ftDelta[fIndex], state.lastFGFrameTime, constData.frameRenderTime, _frameCount,
               State::Instance().reflexFrameId);
 
     auto frameId = static_cast<uint32_t>(willDispatchFrame);
@@ -1034,7 +1095,40 @@ void* XeFG_Dx12::SwapchainContext() { return _swapChainContext; }
 
 XeFG_Dx12::~XeFG_Dx12() { Shutdown(); }
 
-bool XeFG_Dx12::SetInterpolatedFrameCount(UINT interpolatedFrameCount) { return true; }
+bool XeFG_Dx12::SetInterpolatedFrameCount(UINT interpolatedFrameCount)
+{
+    const int requestedCount = static_cast<int>(interpolatedFrameCount);
+    const int runtimeMax = GetMaxInterpolationCount();
+    const int count = std::clamp(requestedCount, 1, runtimeMax);
+
+    if (_framesToInterpolate == count)
+        return true;
+
+    if (_swapChainContext == nullptr)
+        return false;
+
+    auto setNumInterpolatedFrames = XeFGProxy::SetNumInterpolatedFrames();
+    if (setNumInterpolatedFrames == nullptr)
+    {
+        LOG_WARN("XeFG runtime does not support changing interpolation count dynamically");
+        return false;
+    }
+
+#ifndef DONT_USE_XMX
+    ScopedSkipSpoofingGlobal skipSpoofingGlobal {};
+#endif
+
+    const auto result = setNumInterpolatedFrames(_swapChainContext, static_cast<UINT>(count));
+    if (result != XEFG_SWAPCHAIN_RESULT_SUCCESS)
+    {
+        LOG_ERROR("SetNumInterpolatedFrames error: {} ({})", magic_enum::enum_name(result), (UINT) result);
+        return false;
+    }
+
+    _framesToInterpolate = count;
+    State::Instance().WAR_xefgRequestFGToggle = true;
+    return true;
+}
 
 void XeFG_Dx12::EvaluateState(ID3D12Device* device, FG_Constants& fgConstants)
 {

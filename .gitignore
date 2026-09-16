@@ -419,6 +419,12 @@ FodyWeavers.xsd
 *.dll
 
 !external/directx_agility_sdk/lib/D3D12Core.dll
+!external/dlss/*.dll
+!external/streamline_bin/*.dll
+!OptiScaler/dlssg_sm86/*.dll
+
+# NR runtime: user-supplied / fetched by CI, over GitHub's 100 MB file limit
+external/dlss/nvngx_dlssnr.dll
 
 # Fortran module files
 *.mod

@@ -7,10 +7,10 @@ name: Build (No Signing)
 
 on:
   workflow_dispatch:
-#  push:
-#    branches: [ "master" ]
-#  pull_request:
-#    branches: [ "master" ]
+  push:
+    branches: [ "optiscaler_dev5", "optiscaler_dev6" ]
+  pull_request:
+    branches: [ "master", "main", "optiscaler_dev5" ]
     
 env:
   # Path to the solution file relative to the root of the project.
@@ -27,7 +27,6 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    environment: Build
 
     steps:
     - uses: actions/checkout@v6
@@ -69,13 +68,22 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        $version = "v$majorVersion.$minorVersion.$hotfixVersion-pre$buildVersion"
+        if ($env:GITHUB_REF_NAME -eq 'optiscaler_dev6') {
+            $version = "dev-6"
+            $releaseName = "evairx/OptiScalerMFG dev-6"
+        } elseif ($env:GITHUB_REF_NAME -eq 'optiscaler_dev5') {
+            $version = "dev-5"
+            $releaseName = "evairx/OptiScalerMFG dev-5"
+        } else {
+            $version = "v10.0.2-pre3"
+            $releaseName = "OptiScaler-MFG v10.0.2-pre3"
+        }
         
         # Get the current date in a specific format (e.g., YYYYMMDD)
         $date = Get-Date -Format "yyyyMMdd"
         
         # Construct the output filename with version and date
-        $outputFileName = "OptiScaler_${version}_${date}"
+        $outputFileName = "OptiScalerMFG_${version}_${date}"
         
         # Output the generated filename
         Write-Output "Generated Filename: $outputFileName"
@@ -83,6 +91,7 @@ jobs:
         # Write outputs to GITHUB_OUTPUT
         "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         "filename=$outputFileName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        "release_name=$releaseName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         
       continue-on-error: false
       
@@ -93,6 +102,26 @@ jobs:
         
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
+
+    # NR's runtime (nvngx_dlssnr.dll) is NVIDIA's, ~165 MB, and cannot live in
+    # the repository. Fetch it into external/dlss/ so the PostBuild copy picks
+    # it up, or skip and ship without it. Override the source with the
+    # NVNGX_DLSSNR_URL repository variable.
+    - name: Fetch nvngx_dlssnr.dll (optional)
+      shell: pwsh
+      run: |
+        $url = "${{ vars.NVNGX_DLSSNR_URL }}"
+        if ([string]::IsNullOrWhiteSpace($url)) {
+            $url = "https://github.com/${{ github.repository }}/releases/download/nr-runtime/nvngx_dlssnr.dll"
+        }
+        try {
+            New-Item -ItemType Directory -Force -Path "external/dlss" | Out-Null
+            Invoke-WebRequest -Uri $url -OutFile "external/dlss/nvngx_dlssnr.dll" -UseBasicParsing
+            $hash = (Get-FileHash "external/dlss/nvngx_dlssnr.dll" -Algorithm SHA256).Hash
+            Write-Host "Fetched nvngx_dlssnr.dll ($url), SHA256 $hash"
+        } catch {
+            Write-Warning "nvngx_dlssnr.dll not available ($url); building without the NR runtime."
+        }
 
     - name: Build
       working-directory: ${{env.GITHUB_WORKSPACE}}
@@ -114,3 +143,15 @@ jobs:
         archive: false
         compression-level: 0
         if-no-files-found: error
+
+    - name: Create or Update GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.get_version.outputs.version }}
+        name: ${{ steps.get_version.outputs.release_name }}
+        body_path: RELEASE_NOTES.md
+        draft: ${{ !startsWith(github.ref_name, 'optiscaler_dev') }}
+        prerelease: ${{ github.ref_name != 'optiscaler_dev5' }}
+        files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

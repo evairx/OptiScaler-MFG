@@ -1,13 +1,11 @@
 // Adapted from y4my4my4m/OptiScaler_DLSSNR_Multipass_MFG, tag v4 (7b7220bb), GPL-3.0.
 #pragma once
 
-#if defined(OPTISCALER_RTX40_MFG)
-
 #include <SysUtils.h>
 
 #include <string>
 
-// Multi Frame Generation on Ada.
+// Multi Frame Generation on Ada (RTX 40).
 //
 // nvngx_dlssg.dll gates MFG on the architecture id reported by the driver: 0x1b0 is Blackwell, Ada
 // is below it. Two sites decide what a card is allowed to do, and both compare against that constant.
@@ -25,7 +23,7 @@
 //       jbe   accept
 //
 // Patched: the count immediates become 5, the cmovl becomes a nop, and the jl becomes two nops. The
-// result is a maximum of five generated frames -- 6X -- on supported Ada GPUs.
+// result is a maximum of five generated frames -- 6X -- on any architecture.
 //
 // Memory only. The file on disk carries an Authenticode signature and is left alone.
 //
@@ -35,7 +33,7 @@
 //
 // Ada also runs a different interpolation kernel: Kernel_EstimateIntermMvecsScatter reads three f32
 // fields of its parameter block on sm_120 and one on sm_89, so every generated frame lands at the
-// same point between the two real ones. The Blackwell image is retargeted in place to answer for Ada.
+// same point between the two real ones. The Blackwell images are retargeted in place to answer for Ada.
 namespace MfgUnlock
 {
 // What the last attempt found. The signatures are version specific by construction -- they carry the
@@ -47,20 +45,22 @@ struct Status
     bool ModuleFound = false; // nvngx_dlssg.dll was loaded
     bool AdvertiseMatched = false;
     bool ValidateMatched = false;
-    unsigned int KernelsRewritten = 0;
+    unsigned int KernelsRewritten = 0; // Blackwell image retargeted for Ada
+    unsigned int TemporalFixPatches = 0; // descriptor slots redirected to the temporal-corrected kernel
+    std::string TemporalFixDetail;       // why the temporal fallback applied or failed
     std::string SnippetVersion; // file version of nvngx_dlssg.dll, empty if it could not be read
 };
 
-Status LastStatus();
-bool EnabledForSession();
+const Status& LastStatus();
 
 // Applies the patches once per process. Silent and harmless when the config option is off, when
 // nvngx_dlssg.dll is not loaded, or when a signature does not match exactly once.
 void TryApply(HMODULE module = nullptr);
 bool Pending();
 
+// Checks if the primary GPU is an NVIDIA Ada Lovelace (RTX 40 series) GPU.
+bool IsSupportedGpu();
+
 // The generated frame ceiling the patches opened, or 0 when they did not land.
 unsigned int UnlockedMax();
 } // namespace MfgUnlock
-
-#endif

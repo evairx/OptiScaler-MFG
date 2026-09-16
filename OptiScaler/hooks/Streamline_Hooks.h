@@ -141,6 +141,21 @@ class StreamlineHooks
     static void updateForceReflex();
     static void updateDlssgOptions();
     static void applyMenuDlssgInterlock(sl::DLSSGOptions& options, bool potentiallyActive);
+    inline static bool isOptiScalerSettingDLSSGOptions = false;
+
+    class ScopedOptiScalerDLSSGOptions
+    {
+      private:
+        bool previousState;
+
+      public:
+        ScopedOptiScalerDLSSGOptions() : previousState(isOptiScalerSettingDLSSGOptions)
+        {
+            isOptiScalerSettingDLSSGOptions = true;
+        }
+
+        ~ScopedOptiScalerDLSSGOptions() { isOptiScalerSettingDLSSGOptions = previousState; }
+    };
 
     static void unhookInterposer();
     static void hookInterposer(HMODULE slInterposer);
@@ -170,6 +185,9 @@ class StreamlineHooks
     static bool isCommonHooked();
     static bool isPclHooked();
     static bool isReflexHooked();
+    static bool isNativeDlssgAvailable();
+    static bool isNativeDlssgActive();
+    static bool registerNativeDlssgModule(HMODULE module);
 
   private:
     inline static sl::RenderAPI renderApi = sl::RenderAPI::eCount;
@@ -263,6 +281,9 @@ class StreamlineHooks
                                         const sl::DLSSGOptions* options);
     static void* hkdlssg_slGetPluginFunction(const char* functionName);
     static const char* hkdlssg_slGetPluginJSONConfig_sl1();
+
+    // DLSSG Temporal Reset & Options State
+    inline static std::atomic_bool s_requestTemporalReset { false };
 
     // Local DLSSG
     inline static PFN_slGetPluginFunction o_local_dlssg_slGetPluginFunction = nullptr;

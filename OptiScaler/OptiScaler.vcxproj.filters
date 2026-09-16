@@ -497,6 +497,12 @@
     <ClInclude Include="proxies\XeFG_Proxy.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="proxies\XeFGUnlock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="proxies\XeFGPacing.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="proxies\XeLL_Proxy.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -774,7 +780,10 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="framegen\dlssg\MfgUnlock.h">
-      <Filter>framegen</Filter>
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="framegen\dlssg\AmpereMfgLoader.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="framegen\dlssg\DLSSG_Dx12.h">
       <Filter>Header Files</Filter>
@@ -783,9 +792,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="hooks\Hook_Utils.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="framegen\nvngx\Nvngx_FG.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="NVNGX_Parameter.h">
@@ -915,24 +921,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="inputs\FG\Upscaler_Inputs_Dx11wDx12.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="framegen\nvngx\Nvngx_FFX.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="framegen\nvngx\IFGNvngx.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="framegen\nvngx\Nvngx_Nukems.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="framegen\nvngx\Nvngx_DllProxy.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="framegen\nvngx\Nvngx_Arturs.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="framegen\nvngx\Nvngx_Combo.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="misc\SkipSpoof.h">
@@ -1380,15 +1368,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="framegen\dlssg\MfgUnlock.cpp">
-      <Filter>framegen</Filter>
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="framegen\dlssg\AmpereMfgLoader.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="framegen\dlssg\DLSSG_Dx12.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="OptiTypes.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="framegen\nvngx\Nvngx_FG.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="NVNGX_Parameter.cpp">
@@ -1503,21 +1491,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="shaders\magnifier\Magnifier_Common.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="framegen\nvngx\Nvngx_FFX.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="framegen\nvngx\Nvngx_Nukems.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="framegen\nvngx\Nvngx_DllProxy.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="framegen\nvngx\Nvngx_Arturs.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="framegen\nvngx\Nvngx_Combo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="misc\SkipSpoof.cpp">

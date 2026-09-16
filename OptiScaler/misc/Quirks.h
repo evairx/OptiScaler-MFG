@@ -366,8 +366,8 @@ static const QuirkEntry quirkTable[] = {
     QUIRK_ENTRY("dyinglightgame_x64_rwdi.exe", GameQuirk::DisableDxgiSpoofing, GameQuirk::DisableHudfix),
 
     // Dying Light: The Beast
-    // SL spoof enough to unlock everything DLSS, manual input polling for fixing unclickable Opti Overlay
-    QUIRK_ENTRY("dyinglightgame_thebeast_x64_rwdi.exe", GameQuirk::DisableDxgiSpoofing),
+    // SL spoof enough to unlock everything DLSS, manual input polling for fixing unclickable Opti Overlay, Hudfix incompatible
+    QUIRK_ENTRY("dyinglightgame_thebeast_x64_rwdi.exe", GameQuirk::DisableDxgiSpoofing, GameQuirk::DisableHudfix),
 
     // Assetto Corsa EVO
     // SL spoof enough to unlock everything DLSS, AE required to fix FSR4 ghosting
