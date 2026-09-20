@@ -20,6 +20,11 @@ Esta versión soluciona de forma definitiva el cuelgue (crash / cierre repentino
    - Monitoreo en tiempo real de versión de `nvngx_dlssg.dll`, estado de gates y conteo de kernels retargeteados.
    - Configuración persistente con `AdaMfgUnlock` y `AdaBlackwellKernels` en `OptiScaler.ini`.
 
+6. **Proxy SM75/SM86 empaquetado**:
+   - El release incluye el proxy `sdli1995` 0.3.5 hash-pinned como `OptiScaler/dlssg_sm86/version.dll`.
+   - Se selecciona automáticamente cuando el unlocker RTX 20/30 está activo; se puede desactivar con
+     `AmpereNative6XRuntime=false` para usar únicamente el backend integrado.
+
 - El addon `MFGAdaUnlock-RenoDx` no es ReShade; es una librería en C++ de 5 archivos creada por RenoDX.
 - Cargar `ReShade64.dll` dentro de OptiScaler crearía conflictos graves de doble enganche DirectX y consumo de recursos.
 - OptiScaler ya corre en el espacio de memoria del juego (`dxgi.dll`, `sl.interposer.dll`, `nvngx.dll`) y ejecuta exactamente la misma lógica de RenoDX de manera limpia y nativa.
@@ -29,7 +34,7 @@ Esta versión soluciona de forma definitiva el cuelgue (crash / cierre repentino
 | Ruta | Estado |
 | --- | --- |
 | RTX 40/Ada, DLSS-G/MFG x2–x6 | Funcional con DLSS-G nativo: parcheo de gates en memoria + retargeting de kernels `sm_120` → `sm_89` |
-| RTX 30/20 (SM86/SM75) | Re-host CUDA de terceros (`dlssg_sm86.dll`), hasta 4X. Véase `THIRD_PARTY_NOTICES.md` |
+| RTX 30/20 (SM86/SM75) | Built-in runtime incluido, pero el desbloqueador es opt-in desde el menú; ofrece X2-X6 hash-pinned y fallback seguro a X4 para plugins antiguos. Véase `THIRD_PARTY_NOTICES.md` |
 | Software Flip Pacing (RSYNC) | **No implementado**: `FGDLSSGForceFlipMeteringOff` se lee del INI pero no se aplica |
 | Quality Guard (Anti-Flicker) | **No implementado**: `FGDLSSGQualityGuard` solo existe en config y menú |
 | OptiFG como input | Se mantiene. Con DLSS-G nativo puede alimentar NVIDIA DLSS MFG en RTX 40; en juegos sin Frame Generation la salida DLSSG no presenta frames extra (usar FSR FG standalone o Intel XeFG) |

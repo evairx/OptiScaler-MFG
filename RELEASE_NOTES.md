@@ -1,6 +1,6 @@
-# evairx/OptiScalerMFG dev-6
+# OptiScaler-MFG dev_7
 
-Normal release (not a pre-release). CI builds Windows x64 only; see Validation below for the author's GPU smoke test.
+Pre-release. CI builds Windows x64 only; see Validation below for the author's GPU smoke test.
 
 ## NVIDIA DLSS MFG unlock, native (RTX 40 / Ada)
 - Blackwell (sm_120) kernels retargeted to Ada (sm_89), giving the game's own DLSS-G native multi-frame generation up to 6X.
@@ -8,7 +8,8 @@ Normal release (not a pre-release). CI builds Windows x64 only; see Validation b
 
 ## RTX 30 / 20 (Ampere / Turing)
 - Hash-pinned SM86 X5/X6 loader with the tested X4 fallback path.
-- Experimental sdli1995 0.3.x runtime support (native 6X, `[DLSSG] AmpereNative6XRuntime`, default off).
+- Built-in SM75/SM86 runtime is included and ready without a separate installation; the RTX 20/30 MFG unlocker remains opt-in to avoid unexpected game crashes. The game-side plugin is capped safely when it only supports 4X.
+- Optional sdli1995 0.3.5 runtime support remains available through `[DLSSG] AmpereNative6XRuntime`.
 
 ## Intel XeFG MFG
 - Native 2X-6X unlock (five byte patches plus pacing per generated frame): `[XeFG] UnlockMFG`, `MaxInterpolatedFrames`, `ExtraPacing`.
@@ -30,7 +31,7 @@ Normal release (not a pre-release). CI builds Windows x64 only; see Validation b
 - Native DLSS MFG section shown only when FG Input and FG Output are `None`; FG selectors locked while the unlocker is active; correct save-and-restart prompt; `Enable DLSS MFG Unlocker` checkbox; noisy status messages removed.
 
 ## Versioning
-- Builds identify as `evairx/OptiScalerMFG dev-N` (tag `dev-6`, asset `OptiScalerMFG_dev-6_<date>.7z`).
+- Builds identify as `OptiScaler-MFG dev_N` (tag `dev_7`, asset `OptiScaler-MFG_dev_7_<date>.7z`).
 
 ## Validation
 - CI build: Windows x64. Author GPU smoke test: Onimusha: Way of the Sword (RE Engine) with REFramework - native RTX 40 MFG and XeFG OK, NR OK.

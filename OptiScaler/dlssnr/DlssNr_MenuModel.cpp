@@ -152,6 +152,26 @@ void RenderModel(Config* config, float menuResScale)
         ImGui::TreePop();
     }
 
+    if (config->DlssNrPasses.value_or_default() >= 3 && ImGui::TreeNodeEx("Pass 3", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        InheritedProfileCombo("Style", &config->DlssNrPass3Style, inheritedStyles, IM_ARRAYSIZE(inheritedStyles));
+        DeferredSlider("Intensity", &config->DlssNrPass3Intensity, 0.0f, 2.0f,
+                       config->DlssNrIntensity.value_or_default(), "%.2f", true);
+        DeferredSlider("Local structure", &config->DlssNrPass3LocalStructure, 0.0f, 2.0f,
+                       config->DlssNrLocalStructure.value_or_default(), "%.2f", true);
+        DeferredSlider("Local tone", &config->DlssNrPass3LocalTone, 0.0f, 2.0f, 0.0f, "%.2f", true);
+        DeferredSlider("Skin structure", &config->DlssNrPass3SkinStructure, -1.0f, 2.0f,
+                       config->DlssNrSkinStructure.value_or_default(), "%.2f", true);
+        bool mask = config->DlssNrPass3AutoMask.has_value() ? config->DlssNrPass3AutoMask.value()
+                                                             : config->DlssNrAutoMask.value_or_default();
+        if (ImGui::Checkbox("Auto skin mask", &mask))
+            config->DlssNrPass3AutoMask = mask;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Reset##pass3-mask"))
+            config->DlssNrPass3AutoMask = std::optional<bool> {};
+        ImGui::TreePop();
+    }
+
 }
 
 } // namespace DlssNr::MenuSections

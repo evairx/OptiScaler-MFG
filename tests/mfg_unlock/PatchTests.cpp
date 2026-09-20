@@ -44,9 +44,9 @@ int main(int argc, char** argv) try
     if (mode == "restart")
     {
         Config::Instance()->FGDLSSGAdaMfgUnlock.enabled = false;
-        Expect(!MfgUnlock::EnabledForSession(), "Default must be inactive");
+        Expect(!MfgUnlock::Pending(), "Default must be inactive");
         Config::Instance()->FGDLSSGAdaMfgUnlock.enabled = true;
-        Expect(!MfgUnlock::EnabledForSession() && !MfgUnlock::Pending(), "UI enabled a live patch without restart");
+        Expect(MfgUnlock::Pending(), "Enabling MFG must leave a restart pending");
         std::cout << "PASS " << mode << '\n'; return 0;
     }
     auto* memory = static_cast<uint8_t*>(VirtualAlloc(nullptr, 0x5000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
@@ -98,7 +98,7 @@ int main(int argc, char** argv) try
         MfgUnlock::TryApply(module);
         Expect(std::memcmp(memory, patched.data(), patched.size()) == 0, "Repeated patch changed the image");
         Config::Instance()->FGDLSSGAdaMfgUnlock.enabled = false;
-        Expect(MfgUnlock::EnabledForSession(), "Disabling must wait for restart");
+        Expect(!MfgUnlock::Pending(), "Disabling MFG must stop reporting a pending restart");
     }
     else
     {

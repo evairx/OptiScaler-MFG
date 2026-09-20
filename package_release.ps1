@@ -1,5 +1,6 @@
-# Package OptiScaler and its ordinary dependencies, including the built-in NR backend.
-# NVIDIA model/FG runtimes and unrelated optional payloads are never collected from build folders.
+# Package OptiScaler and its ordinary dependencies, including the built-in NR backend and optional
+# hash-pinned SM75/SM86 proxy. NVIDIA model/FG runtimes and unrelated optional payloads are never
+# collected from build folders.
 param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]*$')]
     [string]$Version = 'nr-dev',
@@ -49,6 +50,10 @@ foreach ($name in @('OptiScaler.ini', 'setup_windows.bat', 'setup_linux.sh', 'RE
 foreach ($name in @('libxess.dll', 'libxess_dx11.dll', 'libxell.dll', 'libxess_fg.dll')) {
     $files["OptiScaler/$name"] = Join-Path $root "external/xess/bin/$name"
 }
+$files['OptiScaler/dlssg_sm86/dlssg_sm86.dll'] = Join-Path $root 'OptiScaler/dlssg_sm86/dlssg_sm86.dll'
+$files['OptiScaler/dlssg_sm86/version.dll'] = Join-Path $root 'OptiScaler/dlssg_sm86/version.dll'
+$files['OptiScaler/dlssg_sm86/dlssg_sm86.ini'] = Join-Path $root 'OptiScaler/dlssg_sm86/dlssg_sm86.ini'
+$files['OptiScaler/dlssg_sm86/THIRD_PARTY_NOTICES.txt'] = Join-Path $root 'OptiScaler/dlssg_sm86/THIRD_PARTY_NOTICES.txt'
 $files['OptiScaler/amd_fidelityfx_vk.dll'] = Join-Path $root 'external/FidelityFX-SDK/PrebuiltSignedDLL/amd_fidelityfx_vk.dll'
 foreach ($name in @('amd_fidelityfx_loader_dx12.dll', 'amd_fidelityfx_upscaler_dx12.dll', 'amd_fidelityfx_framegeneration_dx12.dll')) {
     $files["OptiScaler/$name"] = Join-Path $root "external/FidelityFX-SDK-v2/Kits/FidelityFX/signedbin/$name"
@@ -70,6 +75,14 @@ foreach ($entry in $files.GetEnumerator()) {
     if (-not (Test-Path -LiteralPath $entry.Value -PathType Leaf)) {
         throw "Required release file is missing: $($entry.Value)"
     }
+}
+$ampereRuntimeHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $files['OptiScaler/dlssg_sm86/dlssg_sm86.dll']).Hash.ToLowerInvariant()
+if ($ampereRuntimeHash -ne 'c844646d835a7b88ed1382eea80403d38b433f8ac09cf92581c73698c44ae7c2') {
+    throw 'The built-in SM75/SM86 runtime hash is not the verified X2-X6 source.'
+}
+$ampereProxyHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $files['OptiScaler/dlssg_sm86/version.dll']).Hash.ToLowerInvariant()
+if ($ampereProxyHash -ne 'c3934a09399f022504227c72df0bf8c0de55f9a08880dddde898c5262cefa838') {
+    throw 'The bundled sdli1995 proxy hash is not the verified 0.3.5 source.'
 }
 
 $ini = Get-Content -LiteralPath $files['OptiScaler.ini'] -Raw

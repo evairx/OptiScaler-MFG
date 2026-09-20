@@ -9,7 +9,7 @@ namespace AmpereMfgLoader
 struct Status
 {
     bool Enabled = false;     // Config says to use it
-    bool DllFound = false;    // dlssg_sm86.dll found in OptiScaler/dlssg_sm86/
+    bool DllFound = false;    // A compatible SM75/SM86 runtime was found
     bool IniWritten = false;  // dlssg_sm86.ini generated and written
     bool DllLoaded = false;   // LoadLibrary succeeded
     bool ExperimentalRequested = false; // 5X/6X asked for in the config
@@ -17,13 +17,17 @@ struct Status
     bool ExperimentalFallback = false;  // 5X/6X unavailable; proven 4X path kept
     std::string ExperimentalDetail;     // why the experimental patch applied or failed
     bool Native6XRequested = false;     // Config opted into the sdli1995 0.3.x runtime
-    bool Native6XRuntimeFound = false;  // A hash-pinned 0.3.x binary is in the sidecar folder
-    bool Native6XActive = false;        // That runtime is the one being loaded, used as-is
+    bool Native6XRuntimeFound = false;  // A hash-pinned 0.3.x binary is in the game or sidecar folder
+    bool Native6XActive = false;        // That runtime loaded successfully and is used as-is
     std::string Native6XDetail;         // Version/ceiling detail for logs, menu and reports
+    int MaxInterpolationCount = 1;      // Verified runtime ceiling: 1=2X, 3=4X, 5=6X
     std::string ErrorMessage; // Human-readable error if anything failed
 };
 
 Status LastStatus();
+
+/// Returns the verified interpolation ceiling of the loaded SM75/SM86 backend.
+int MaxInterpolationCount();
 
 /// Called after DLL initialization, once GPU/environment information is available.
 void TrySetup();
@@ -65,9 +69,8 @@ inline std::string FormatIniContent(int maxFrames, const std::string& kernelImg,
 }
 
 /// Formats dlssg_sm86.ini for the sdli1995 0.3.x proxy runtime. The 0.3.x loader derives its
-/// ceiling from [FrameGeneration] MaxGeneratedFrames (3 = 4X; 5 = 6X on the 310.9 build only,
-/// the 310.1 build clamps it back to 3 and just logs it). The runtime is used exactly as
-/// shipped: this INI is the only thing written for it.
+/// ceiling from [FrameGeneration] MaxGeneratedFrames (3 = 4X; 5 = 6X on the 310.9 build).
+/// The runtime is used exactly as shipped: this INI is the only thing written for it.
 inline std::string FormatNativeIniContent(int maxFrames, const std::string& router = "SM86", int logLevel = 1)
 {
     if (maxFrames != 3 && maxFrames != 5)

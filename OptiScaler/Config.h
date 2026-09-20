@@ -910,11 +910,11 @@ class Config
     CustomOptional<bool> FGDLSSGAdaMfgUnlock { false };         // In-memory RTX 40 MFG unlock
     CustomOptional<bool, NoDefault> FGDLSSGAdaBlackwellKernels; // Automatically retarget Blackwell kernels to Ada sm_89
     CustomOptional<bool> FGDLSSGUnlockAdaMFG { false };         // Backward compatibility alias
-    CustomOptional<bool> FGDLSSGAmpereMfgUnlock { false };       // Sideloads SM86/SM75 MFG for RTX 30 / RTX 20
-    CustomOptional<int> FGDLSSGAmpereMfgMaxFrames { 3 };        // 0-5: 0=runtime default (3X), 1=2X, 2=3X, 3=4X, 4=5X (experimental), 5=6X (experimental)
+    CustomOptional<bool> FGDLSSGAmpereMfgUnlock { false };       // Built-in SM86/SM75 MFG for RTX 30 / RTX 20, opt-in
+    CustomOptional<int> FGDLSSGAmpereMfgMaxFrames { 5 };         // 0-5: 0=runtime default (3X), 1=2X, 2=3X, 3=4X, 4=5X, 5=6X
     CustomOptional<std::string, NoDefault> FGDLSSGAmpereMfgKernelImage;     // Auto / PTX / Cubin
     CustomOptional<bool> FGDLSSGAmpereMfgHardwareBilinear { false };        // Optional approximate sampling (SM86 only)
-    CustomOptional<bool> FGDLSSGAmpereNative6XRuntime { false };            // Experimental: hash-pinned sdli1995 0.3.x runtime dropped in the sidecar folder, used as-is for native 6X
+    CustomOptional<bool> FGDLSSGAmpereNative6XRuntime { true };             // Bundled sdli1995 0.3.x proxy, with sidecar fallback
     CustomOptional<bool> FGDLSSGQualityGuard { true };          // Quality Guard: filters mismatched HUD separation in 3X/4X to prevent flickering
     CustomOptional<int> FGDLSSGBoundaryMitigation { 1 };        // 0=off, 1=balanced (upstream 1.0 default), 2=aggressive
     CustomOptional<bool> FGDLSSGForceFlipMeteringOff { true };  // Software flip pacing (RSYNC) for Ada multi-frame (prevents presentation freezes and black lines in 3X/4X)

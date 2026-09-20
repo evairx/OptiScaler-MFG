@@ -6,6 +6,7 @@
 #include "Config.h"
 #include <ankerl/unordered_dense.h>
 #include <misc/IdentifyGpu.h>
+#include <framegen/dlssg/AmpereMfgLoader.h>
 #include <framegen/dlssg/MfgUnlock.h>
 #include <hooks/Streamline_Hooks.h>
 
@@ -819,15 +820,12 @@ void InitNGXParameters(NVSDK_NGX_Parameter* InParams, API api)
             MfgUnlock::TryApply();
             countMax = MfgUnlock::UnlockedMax();
             if (countMax == 0)
-                countMax = 5;
+                countMax = 1;
         }
         else if (StreamlineHooks::isNativeDlssgAvailable() &&
                  Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default())
         {
-            int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
-            if (ampereMax < 1 || ampereMax > 5)
-                ampereMax = 3;
-            countMax = static_cast<uint32_t>(ampereMax);
+            countMax = static_cast<uint32_t>(AmpereMfgLoader::MaxInterpolationCount());
         }
         InParams->Set("DLSSG.MultiFrameCountMax", countMax);
 

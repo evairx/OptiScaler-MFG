@@ -9,6 +9,7 @@
 #include <scanner/scanner.h>
 #include <misc/IdentifyGpu.h>
 #include <limits>
+#include <mutex>
 
 namespace
 {
@@ -38,6 +39,8 @@ constexpr std::string_view kAdvertisePattern309 = "81 FD B0 01 00 00 0F 8C ? ? ?
 constexpr std::string_view kValidatePattern309 = "3D B0 01 00 00 0F 93 C0";
 
 MfgUnlock::Status g_status {};
+std::mutex g_statusMutex;
+HMODULE g_attemptedModule = nullptr;
 
 uintptr_t UniqueAddress(HMODULE module, std::string_view pattern)
 {
@@ -577,6 +580,50 @@ struct Patch
 
 std::vector<Patch> g_patches;
 void* g_allocation = nullptr;
+HMODULE g_module = nullptr;
+
+bool IsMappedToModule(HMODULE module, const void* address)
+{
+    if (module == nullptr || address == nullptr)
+        return false;
+
+    HMODULE owner = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(address), &owner))
+        return false;
+
+    return owner == module;
+}
+
+void Reset(HMODULE module)
+{
+    if (module == nullptr || g_module != module)
+        return;
+
+    for (auto it = g_patches.rbegin(); it != g_patches.rend(); ++it)
+    {
+        if (!IsMappedToModule(module, it->slot))
+            continue;
+
+        DWORD oldProtect = 0;
+        if (!VirtualProtect(it->slot, sizeof(uint64_t), PAGE_READWRITE, &oldProtect))
+            continue;
+
+        *it->slot = it->original;
+        FlushInstructionCache(GetCurrentProcess(), it->slot, sizeof(uint64_t));
+
+        DWORD ignored = 0;
+        VirtualProtect(it->slot, sizeof(uint64_t), oldProtect, &ignored);
+    }
+
+    if (g_allocation != nullptr)
+        VirtualFree(g_allocation, 0, MEM_RELEASE);
+
+    g_patches.clear();
+    g_allocation = nullptr;
+    g_module = nullptr;
+}
 
 struct TemporalTarget
 {
@@ -746,6 +793,7 @@ unsigned int ApplyMidpointFix(HMODULE module, std::string& detail)
     }
 
     g_allocation = mem;
+    g_module = module;
     detail = std::format("redirected {} {} descriptor(s) from a {}-byte fatbin to a {}-byte temporal-corrected rebuild",
                          g_patches.size(), target.profile->descriptorName, target.fatSize, rebuilt.size());
     return static_cast<unsigned int>(g_patches.size());
@@ -787,6 +835,40 @@ constexpr uint32_t kGuardArch = 120;
 
 std::vector<midpoint::Patch> g_patches;
 void* g_allocation = nullptr;
+HMODULE g_module = nullptr;
+
+void Reset(HMODULE module)
+{
+    if (module == nullptr || g_module != module)
+        return;
+
+    for (auto it = g_patches.rbegin(); it != g_patches.rend(); ++it)
+    {
+        HMODULE owner = nullptr;
+        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                reinterpret_cast<LPCWSTR>(it->slot), &owner) ||
+            owner != module)
+            continue;
+
+        DWORD oldProtect = 0;
+        if (!VirtualProtect(it->slot, sizeof(uint64_t), PAGE_READWRITE, &oldProtect))
+            continue;
+
+        *it->slot = it->original;
+        FlushInstructionCache(GetCurrentProcess(), it->slot, sizeof(uint64_t));
+
+        DWORD ignored = 0;
+        VirtualProtect(it->slot, sizeof(uint64_t), oldProtect, &ignored);
+    }
+
+    if (g_allocation != nullptr)
+        VirtualFree(g_allocation, 0, MEM_RELEASE);
+
+    g_patches.clear();
+    g_allocation = nullptr;
+    g_module = nullptr;
+}
 
 struct Direction
 {
@@ -1081,6 +1163,7 @@ unsigned int Apply(HMODULE module, int mode, std::string& detail)
     }
 
     g_allocation = mem;
+    g_module = module;
     detail = std::format("redirected {} {} descriptor(s) to the {} boundary guard program",
                          g_patches.size(), target.profile->descriptorName,
                          mode == kAggressive ? "aggressive" : "balanced");
@@ -1309,6 +1392,8 @@ bool MfgUnlock::IsSupportedGpu()
 
 void MfgUnlock::TryApply(HMODULE requestedModule)
 {
+    std::scoped_lock lock(g_statusMutex);
+
     if (!Config::Instance()->FGDLSSGAdaMfgUnlock.value_or_default() &&
         !Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
         return;
@@ -1317,35 +1402,45 @@ void MfgUnlock::TryApply(HMODULE requestedModule)
     if (!IsSupportedGpu())
         return;
 
-    // Latches once nvngx_dlssg.dll is present; before that every call rescans for it.
-    static bool snippetDone = false;
-
-    if (!snippetDone)
+    // Resolve the current provider on every call. Games can unload and recreate the feature DLL
+    // during a settings/resolution transition; a process-wide boolean would leave the new module
+    // unpatched.
+    if (requestedModule != nullptr && State::Instance().nativeDlssgModule != nullptr &&
+        requestedModule != State::Instance().nativeDlssgModule)
     {
-        if (requestedModule != nullptr && State::Instance().nativeDlssgModule != nullptr &&
-            requestedModule != State::Instance().nativeDlssgModule)
-        {
-            LOG_WARN("MFG unlock: refusing to patch a module that is not the native game's DLSS-G");
+        LOG_WARN("MFG unlock: refusing to patch a module that is not the native game's DLSS-G");
+        return;
+    }
+
+    auto module = requestedModule ? requestedModule : State::Instance().nativeDlssgModule;
+    if (module == nullptr)
+        module = GetModuleHandleW(L"nvngx_dlssg.dll");
+    if (module == nullptr)
+        return;
+
+    // Verify this is actually a DLSS-G module before remembering its lifecycle state.
+    wchar_t modPath[MAX_PATH] = {};
+    if (GetModuleFileNameW(module, modPath, MAX_PATH))
+    {
+        std::wstring p(modPath);
+        std::transform(p.begin(), p.end(), p.begin(), ::towlower);
+        if (p.find(L"dlssg") == std::wstring::npos)
             return;
-        }
+    }
 
-        auto module = requestedModule ? requestedModule : State::Instance().nativeDlssgModule;
-        if (module == nullptr)
-            module = GetModuleHandleW(L"nvngx_dlssg.dll");
-        if (module == nullptr)
-            return;
+    if (g_attemptedModule == module && g_status.ModuleFound)
+        return;
 
-        // Verify this is actually a DLSS-G module before inspecting or latching
-        wchar_t modPath[MAX_PATH] = {};
-        if (GetModuleFileNameW(module, modPath, MAX_PATH))
-        {
-            std::wstring p(modPath);
-            std::transform(p.begin(), p.end(), p.begin(), ::towlower);
-            if (p.find(L"dlssg") == std::wstring::npos)
-                return;
-        }
+    if (g_attemptedModule != module)
+    {
+        midpoint::Reset(g_attemptedModule);
+        boundary::Reset(g_attemptedModule);
+        g_attemptedModule = module;
+        g_status = {};
+    }
 
-        snippetDone = true;
+    if (!g_status.ModuleFound)
+    {
         g_status.ModuleFound = true;
         g_status.SnippetVersion = ModuleVersion(module);
 
@@ -1430,11 +1525,15 @@ unsigned int MfgUnlock::UnlockedMax()
 
 bool MfgUnlock::Pending()
 {
+    std::scoped_lock lock(g_statusMutex);
+
     if (!Config::Instance()->FGDLSSGAdaMfgUnlock.value_or_default() &&
         !Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
         return false;
 
-    if (g_status.ModuleFound)
+    if (g_status.ModuleFound &&
+        (State::Instance().nativeDlssgModule == nullptr ||
+         State::Instance().nativeDlssgModule == g_attemptedModule))
         return false;
 
     if (!IsSupportedGpu())
@@ -1443,4 +1542,8 @@ bool MfgUnlock::Pending()
     return true;
 }
 
-const MfgUnlock::Status& MfgUnlock::LastStatus() { return g_status; }
+MfgUnlock::Status MfgUnlock::LastStatus()
+{
+    std::scoped_lock lock(g_statusMutex);
+    return g_status;
+}

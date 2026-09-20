@@ -54,7 +54,7 @@ struct Status
     std::string SnippetVersion; // file version of nvngx_dlssg.dll, empty if it could not be read
 };
 
-const Status& LastStatus();
+Status LastStatus();
 
 // Applies the patches once per process. Silent and harmless when the config option is off, when
 // nvngx_dlssg.dll is not loaded, or when a signature does not match exactly once.

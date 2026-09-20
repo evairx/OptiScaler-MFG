@@ -3122,7 +3122,11 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
     auto& primaryGpu = *ctx.primaryGpu;
 
 #if defined(OPTISCALER_RTX40_MFG)
-    const bool adaEnabledForSession = MfgUnlock::EnabledForSession();
+    const auto mfgStatus = MfgUnlock::LastStatus();
+    const bool adaEnabledForSession =
+        mfgStatus.ModuleFound &&
+        (mfgStatus.KernelsRewritten > 0 || mfgStatus.TemporalFixPatches > 0 ||
+         mfgStatus.BoundaryMitigationPatches > 0);
     bool adaUnlock = config->FGDLSSGAdaMfgUnlock.value_or_default();
     const bool isAda = primaryGpu.vendorId == VendorId::Nvidia &&
                        primaryGpu.nvidiaArchInfo.architecture_id == NV_GPU_ARCHITECTURE_AD100;
@@ -3134,15 +3138,14 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                    "\nDo not combine with another MFG unlocker.");
     if (isAda && (adaUnlock || adaEnabledForSession))
     {
-        const auto status = MfgUnlock::LastStatus();
         if (adaUnlock != adaEnabledForSession)
             ImGui::TextWrapped("Save Settings and restart to apply this change.");
-        else if (!status.ModuleFound)
+        else if (!mfgStatus.ModuleFound)
             ImGui::TextWrapped("Waiting for DLSSG to load.");
-        else if (status.AdvertiseMatched && status.ValidateMatched && status.KernelsRewritten)
-            ImGui::TextWrapped("DLSSG %s: RTX 40 MFG unlock applied.", status.SnippetVersion.c_str());
+        else if (mfgStatus.AdvertiseMatched && mfgStatus.ValidateMatched && adaEnabledForSession)
+            ImGui::TextWrapped("DLSSG %s: RTX 40 MFG unlock applied.", mfgStatus.SnippetVersion.c_str());
         else
-            ImGui::TextWrapped("DLSSG %s: unlock unavailable for this runtime.", status.SnippetVersion.c_str());
+            ImGui::TextWrapped("DLSSG %s: unlock unavailable for this runtime.", mfgStatus.SnippetVersion.c_str());
     }
 #endif
 
@@ -3436,7 +3439,8 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 }
                 state.fgSettingsChanged = true;
             }
-            ShowHelpMarker("Native NVIDIA Streamline MFG unlocker. Off by default to avoid crashes.\n"
+            ShowHelpMarker("Native NVIDIA Streamline MFG unlocker. The built-in RTX 20/30 backend is included but opt-in;\n"
+                           "enable it and restart the game before using MFG. Ada remains opt-in.\n"
                            "Only available with the game's own DLSS-G (FG Output: None).\n"
                            "While enabled, autonomous generation (OptiFG / XeSS MFG / FSR FG) stays disabled to avoid conflicts.\n"
                            "- RTX 40 (Ada): up to 6X with Blackwell kernel retargeting.\n"
@@ -3554,14 +3558,14 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 }
                 else
                 {
-                    // Multi-Frame Ratio for Ampere/Turing (2X to 6X; 5X/6X experimental)
+                    // Multi-Frame Ratio for Ampere/Turing (2X to 6X; 6X depends on the game plugin)
                     const char* ampereRatioModes[] = {
                         "Default (Game)",
                         "2X (1 extra frame)",
                         "3X (2 extra frames)",
                         "4X (3 extra frames)",
-                        "5X (4 extra frames, experimental)",
-                        "6X (5 extra frames, experimental)"
+                        "5X (4 extra frames)",
+                        "6X (5 extra frames, runtime/plugin dependent)"
                     };
 
                     int currentAmpereRatio = 0; // Default
@@ -3591,7 +3595,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                                 }
                                 else
                                 {
-                                    int extraFrames = i; // 1 -> 2X ... 4 -> 5X, 5 -> 6X (experimental)
+                                    int extraFrames = i; // 1 -> 2X ... 4 -> 5X, 5 -> 6X
                                     config->FGDLSSGOverrideInterpolationCount = extraFrames;
                                     config->FGDLSSGInterpolationCount = extraFrames;
                                     config->FGDLSSGAmpereMfgMaxFrames = std::max(config->FGDLSSGAmpereMfgMaxFrames.value_or_default(), extraFrames);
@@ -3605,9 +3609,10 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                         ImGui::EndCombo();
                     }
                     ImGui::PopItemWidth();
-                    ShowHelpMarker("Select desired frame generation multiplier for RTX 20/30 (2X up to 6X).\n\n"
-                                   "5X/6X need a hash-pinned Native 0.2.4 loader; the loader is patched automatically and\n"
-                                   "unverified on GPU. If the hash or anchors do not match, it falls back to the proven 4X path.");
+                    ShowHelpMarker("Select the desired frame-generation multiplier for RTX 20/30 (2X up to 6X).\n\n"
+                                   "The sdli1995 0.3.5 runtime supports a 6X ceiling, but 6X only works when the\n"
+                                   "game's Streamline plugin supports Dynamic MFG or already allocates the 6X path.\n"
+                                   "Older 4X plugins are capped safely at 4X.");
 
                     bool qGuard = config->FGDLSSGQualityGuard.value_or_default();
                     if (ImGui::Checkbox("Quality Guard (Anti-Flicker)", &qGuard))
@@ -3627,15 +3632,26 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                     if (isAmpere || isTuring)
                     {
                         bool native6x = config->FGDLSSGAmpereNative6XRuntime.value_or_default();
-                        if (ImGui::Checkbox("Experimental: sdli1995 0.3.x native 6X", &native6x))
+                        if (ImGui::Checkbox("Optional: use sdli1995 0.3.x runtime", &native6x))
                         {
                             config->FGDLSSGAmpereNative6XRuntime = native6x;
                             AmpereMfgLoader::WriteIniFiles();
                             state.fgSettingsChanged = true;
                         }
-                        ShowHelpMarker("Needs the sdli1995 0.3.x runtime placed by hand in OptiScaler/dlssg_sm86\n"
-                                       "(version.dll / dlssg_sm86.dll / dlssg_native_031.dll, hash-verified).\n"
-                                       "Native 6X, unverified on GPU. Falls back to the proven 0.2.4 path when absent.");
+                        ShowHelpMarker("The built-in SM75/SM86 runtime is used by default and is included in the package.\n"
+                                       "Optionally place a hash-verified sdli1995 0.3.x runtime in the game folder or\n"
+                                       "OptiScaler/dlssg_sm86 (version.dll, dlssg_sm86.dll or dlssg_native_031.dll).\n"
+                                       "0.3.5 is preferred when multiple versions are present; otherwise the built-in\n"
+                                       "runtime and its verified X5/X6 patch path remain active.");
+
+                        const auto ampereStatus = AmpereMfgLoader::LastStatus();
+                        if (ampereStatus.Native6XActive && ampereStatus.DllLoaded)
+                            ImGui::TextDisabled("sdli1995 %s loaded; verified ceiling: %dX", ampereStatus.Native6XDetail.c_str(),
+                                                ampereStatus.MaxInterpolationCount + 1);
+                        else if (ampereStatus.Native6XRuntimeFound)
+                            ImGui::TextDisabled("sdli1995 runtime detected but could not be loaded; using the legacy fallback if available.");
+                        else if (native6x)
+                            ImGui::TextDisabled("sdli1995 runtime not detected; using the legacy fallback if available.");
                     }
                 }
 
@@ -7589,7 +7605,7 @@ void MenuCommon::RenderMainMenuWindow(RenderMenuContext& ctx)
     // Main menu window
     if (windowTitle.empty())
     {
-        windowTitle = StrFmt("evairx/OptiScalerMFG %s - %s %s %s %s", OPTI_VERSION, state.gameExe.c_str(),
+        windowTitle = StrFmt("OptiScaler-MFG %s - %s %s %s %s", OPTI_VERSION, state.gameExe.c_str(),
                              state.gameName.empty() ? "" : StrFmt("- %s", state.gameName.c_str()).c_str(),
                              (state.detectedQuirks.size() > 0) ? "(Q)" : "", state.isOptiPatcherSucceed ? "(OP)" : "");
     }

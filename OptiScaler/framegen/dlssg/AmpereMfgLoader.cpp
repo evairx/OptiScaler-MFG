@@ -40,6 +40,12 @@ Status LastStatus()
     return s_status;
 }
 
+int MaxInterpolationCount()
+{
+    std::lock_guard lock(s_mutex);
+    return std::clamp(s_status.MaxInterpolationCount, 1, 5);
+}
+
 std::string ResolveAutoKernelImage()
 {
     const auto& gpu = IdentifyGpu::getPrimaryGpu();
@@ -72,6 +78,7 @@ struct NativeRuntimeSource
 };
 
 constexpr NativeRuntimeSource kNativeRuntimeSources[] = {
+    { "c3934a09399f022504227c72df0bf8c0de55f9a08880dddde898c5262cefa838", "0.3.5", true },  // 310.9, 6X
     { "3d4c7d537a6e71e3a9d41ffc6487e054b26c56d27b7c0825d39eaa7ef0c7e86d", "0.3.1", true },  // 310.9, 6X
     { "a22d2453f25d7df3fdc0d6d683c21f01769a115439d58f1341183a75faaf8c7d", "0.3.0", false }, // 310.1, 4X
 };
@@ -97,6 +104,8 @@ std::optional<NativeRuntime> FindNativeRuntime(const std::vector<std::filesystem
 {
     std::error_code error;
     std::vector<std::wstring> visited;
+    std::optional<NativeRuntime> best;
+    std::string bestDetail;
 
     for (const auto& dir : dirs)
     {
@@ -120,16 +129,27 @@ std::optional<NativeRuntime> FindNativeRuntime(const std::vector<std::filesystem
                 if (hash != source.sha256)
                     continue;
 
-                detail = std::format("sdli1995 {} runtime detected at {} ({})", source.label,
-                                     wstring_to_string(candidate.filename().wstring()),
-                                     source.supports6x ? "6X" : "4X ceiling");
-                return NativeRuntime { candidate, std::string(source.label), source.supports6x };
+                const NativeRuntime candidateRuntime { candidate, std::string(source.label), source.supports6x };
+                if (!best.has_value() || candidateRuntime.label > best->label ||
+                    (candidateRuntime.label == best->label && candidateRuntime.supports6x && !best->supports6x))
+                {
+                    best = candidateRuntime;
+                    bestDetail = std::format("sdli1995 {} runtime detected at {} ({})", source.label,
+                                             wstring_to_string(candidate.filename().wstring()),
+                                             source.supports6x ? "6X" : "4X ceiling");
+                }
             }
         }
     }
 
-    detail = "no hash-pinned sdli1995 0.3.x runtime found in the sidecar folder";
-    return std::nullopt;
+    if (best.has_value())
+    {
+        detail = bestDetail;
+        return best;
+    }
+
+    detail = "no hash-pinned sdli1995 0.3.x runtime found in the game or sidecar folders";
+    return {};
 }
 
 int RequestedMaxFrames()
@@ -459,9 +479,9 @@ void TrySetup()
         }
     }
 
-    // Experimental native 6X: a hand-placed, hash-pinned sdli1995 0.3.x runtime in the sidecar
-    // folder takes priority over the 0.2.4 loader. It is used exactly as shipped (never patched)
-    // and can run without dlssg_sm86.dll; when it is missing the 0.2.4 path below is untouched.
+    // Optional native 6X: a hand-placed, hash-pinned sdli1995 0.3.x runtime in the game or sidecar
+    // folder takes priority over the built-in loader. It is used exactly as shipped (never patched)
+    // and can run without dlssg_sm86.dll; when it is missing the built-in path below is used.
     if (cfg->FGDLSSGAmpereNative6XRuntime.value_or_default())
     {
         s_status.Native6XRequested = true;
@@ -469,6 +489,9 @@ void TrySetup()
         std::vector<std::filesystem::path> dirs;
         if (dllFound)
             dirs.push_back(dllPath.parent_path());
+        // sdli1995 distributes version.dll beside the game's renderer executable.
+        dirs.push_back(basePath);
+        dirs.push_back(Util::ExePath().parent_path());
         dirs.push_back(std::filesystem::path(cfg->MainDllPath.value_or(basePath.wstring())) / L"dlssg_sm86");
         dirs.push_back(basePath / L"OptiScaler" / L"dlssg_sm86");
         dirs.push_back(basePath / L"dlssg_sm86");
@@ -479,7 +502,6 @@ void TrySetup()
         {
             s_nativeRuntime = runtime;
             s_status.Native6XRuntimeFound = true;
-            s_status.Native6XActive = true;
             s_status.Native6XDetail =
                 std::format("sdli1995 {} native, {}", runtime->label, runtime->supports6x ? "6X" : "4X ceiling");
             LOG_INFO("AmpereMfgLoader: {} (used as-is, no patching)", s_status.Native6XDetail);
@@ -495,7 +517,7 @@ void TrySetup()
     if (!dllFound && !s_nativeRuntime.has_value())
     {
         s_status.DllFound = false;
-        s_status.ErrorMessage = "dlssg_sm86.dll not found in OptiScaler/dlssg_sm86/ or dlssg_sm86/ subfolders.";
+        s_status.ErrorMessage = "No compatible SM75/SM86 MFG runtime found in the game or sidecar folders.";
         LOG_ERROR("AmpereMfgLoader: {}", s_status.ErrorMessage);
         return;
     }
@@ -518,6 +540,7 @@ void TrySetup()
             loadPath = patched;
             s_status.ExperimentalPatched = true;
             s_status.ExperimentalDetail = patchDetail;
+            s_status.MaxInterpolationCount = requestedFrames;
             LOG_INFO("AmpereMfgLoader: experimental {}X loader ready: {}", requestedFrames + 1, patchDetail);
         }
         else
@@ -525,10 +548,14 @@ void TrySetup()
             s_status.ExperimentalFallback = true;
             s_status.ExperimentalDetail = patchDetail;
             s_iniMaxFramesOverride = 3;
+            s_status.MaxInterpolationCount = 3;
             LOG_WARN("AmpereMfgLoader: experimental {}X unavailable ({}); falling back to proven X4",
                      requestedFrames + 1, patchDetail);
         }
     }
+
+    if (!s_nativeRuntime.has_value() && !s_status.ExperimentalPatched)
+        s_status.MaxInterpolationCount = 3;
 
     // Generate and write companion dlssg_sm86.ini in all locations where dlssg_sm86.dll looks
     WriteIniFiles();
@@ -546,12 +573,19 @@ void TrySetup()
         DWORD err = GetLastError();
         const auto fileName = wstring_to_string(loadPath.filename().wstring());
         s_status.DllLoaded = false;
+        s_status.Native6XActive = false;
+        s_status.MaxInterpolationCount = 1;
         s_status.ErrorMessage = "Failed to load " + fileName + " (error code " + std::to_string(err) + ").";
         LOG_ERROR("AmpereMfgLoader: Failed to load {}, error: {}", fileName, err);
         return;
     }
 
     s_status.DllLoaded = true;
+    if (s_nativeRuntime.has_value())
+    {
+        s_status.Native6XActive = true;
+        s_status.MaxInterpolationCount = s_nativeRuntime->supports6x ? 5 : 3;
+    }
     s_status.ErrorMessage.clear();
     LOG_INFO("AmpereMfgLoader: SM86 MFG loaded successfully from {}", wstring_to_string(loadPath.wstring()));
 }

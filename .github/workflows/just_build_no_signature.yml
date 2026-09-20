@@ -8,9 +8,9 @@ name: Build (No Signing)
 on:
   workflow_dispatch:
   push:
-    branches: [ "optiscaler_dev5", "optiscaler_dev6" ]
+    branches: [ "dev7" ]
   pull_request:
-    branches: [ "master", "main", "optiscaler_dev5" ]
+    branches: [ "main", "dev7" ]
     
 env:
   # Path to the solution file relative to the root of the project.
@@ -68,12 +68,9 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        if ($env:GITHUB_REF_NAME -eq 'optiscaler_dev6') {
-            $version = "dev-6"
-            $releaseName = "evairx/OptiScalerMFG dev-6"
-        } elseif ($env:GITHUB_REF_NAME -eq 'optiscaler_dev5') {
-            $version = "dev-5"
-            $releaseName = "evairx/OptiScalerMFG dev-5"
+        if ($env:GITHUB_REF_NAME -eq 'dev7') {
+            $version = "dev_7"
+            $releaseName = "OptiScaler-MFG dev_7"
         } else {
             $version = "v10.0.2-pre3"
             $releaseName = "OptiScaler-MFG v10.0.2-pre3"
@@ -83,7 +80,7 @@ jobs:
         $date = Get-Date -Format "yyyyMMdd"
         
         # Construct the output filename with version and date
-        $outputFileName = "OptiScalerMFG_${version}_${date}"
+        $outputFileName = "OptiScaler-MFG_${version}_${date}"
         
         # Output the generated filename
         Write-Output "Generated Filename: $outputFileName"
@@ -150,9 +147,9 @@ jobs:
         tag_name: ${{ steps.get_version.outputs.version }}
         name: ${{ steps.get_version.outputs.release_name }}
         body_path: RELEASE_NOTES.md
-        draft: ${{ !startsWith(github.ref_name, 'optiscaler_dev') }}
-        prerelease: false
-        make_latest: true
+        draft: false
+        prerelease: true
+        make_latest: false
         files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

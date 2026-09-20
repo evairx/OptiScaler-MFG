@@ -20,6 +20,14 @@ fcbee9f674e49febac16da9cf087e1987e932b065702b08e1147bb2de036fb7b.
 The native host integrates the qualified exact kernel replacements, decoder,
 pair, merge, residual-chain and image fusions; hardware bilinear is optional.
 
+Optional sdli1995 0.3.5 proxy:
+Repository: https://github.com/sdli1995/dlssg_for_sm86
+Pinned commit: 9621db573e07ed54f50c15bbb585ed9a7bdfac28 (tag 0.3.5)
+SHA256: c3934a09399f022504227c72df0bf8c0de55f9a08880dddde898c5262cefa838
+The unchanged proxy is shipped only as an opt-in backend. Its upstream
+THIRD_PARTY_NOTICES.txt and NVIDIA asset restrictions remain applicable; this
+project does not relicense the proxy or NVIDIA runtime assets.
+
 DirectX helper header d3dx12.h
 Copyright (c) Microsoft Corporation. All rights reserved.
 SPDX-License-Identifier: MIT

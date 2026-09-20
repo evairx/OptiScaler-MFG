@@ -1003,6 +1003,21 @@ static bool IsNativeGameDlssg()
     return std::filesystem::path(lower).filename().wstring() == L"nvngx_dlssg.dll";
 }
 
+static bool IsNativeGameDlssgFlow()
+{
+    return State::Instance().activeFgOutput == FGOutput::NoFG && IsNativeGameDlssg();
+}
+
+static bool IsAmpereMfgFlow()
+{
+    const auto& state = State::Instance();
+    const auto status = AmpereMfgLoader::LastStatus();
+    const bool enabled = Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default() ||
+                         state.activeUnlockAmpereMFG;
+
+    return state.activeFgOutput == FGOutput::NoFG && enabled && status.DllLoaded;
+}
+
 static bool IsNativeDlssgPath(const std::wstring& modulePath)
 {
     std::wstring lower = std::filesystem::path(modulePath).lexically_normal().wstring();
@@ -1022,11 +1037,9 @@ static bool IsNativeDlssgPath(const std::wstring& modulePath)
 
 static bool IsNativeDlssgFlow()
 {
-    const auto& state = State::Instance();
-    // The native flow is the game's own DLSS-G with no OptiScaler FG output.
-    // The FG Input selection does not decide it: when the game owns DLSS-G and
-    // nothing autonomous is generated, this is the path the unlocker patches.
-    return state.activeFgOutput == FGOutput::NoFG && IsNativeGameDlssg();
+    // The FG Input selection does not decide this: both the game's provider and the
+    // verified SM75/SM86 sidecar use the native DLSS-G presentation path.
+    return IsNativeGameDlssgFlow() || IsAmpereMfgFlow();
 }
 
 static uint32_t GetEffectiveDlssgUnlockedMax()
@@ -1038,19 +1051,32 @@ static uint32_t GetEffectiveDlssgUnlockedMax()
         Config::Instance()->FGDLSSGUnlockAdaMFG.value_or_default())
     {
         auto unlockedMax = MfgUnlock::UnlockedMax();
-        return unlockedMax > 0 ? unlockedMax : 5;
+        return unlockedMax > 0 ? unlockedMax : 1;
     }
 
     if (Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default() ||
         State::Instance().activeUnlockAmpereMFG || AmpereMfgLoader::LastStatus().DllLoaded)
     {
-        int ampereMax = Config::Instance()->FGDLSSGAmpereMfgMaxFrames.value_or_default();
-        if (ampereMax < 1 || ampereMax > 5)
-            ampereMax = 3;
-        return static_cast<uint32_t>(ampereMax);
+        return static_cast<uint32_t>(AmpereMfgLoader::MaxInterpolationCount());
     }
 
     return 1;
+}
+
+static uint32_t GetSafeDlssgMax(const sl::DLSSGState& providerState)
+{
+    auto unlockedMax = GetEffectiveDlssgUnlockedMax();
+
+    // The 0.3.x runtime can expose a 6X ceiling, but an old game-side 4X plugin
+    // still allocates only three generated-frame slots. Do not raise that plugin
+    // to 6X unless it advertises Dynamic MFG or already reports the 6X bound.
+    if (unlockedMax > 3 && providerState.numFramesToGenerateMax < 5 &&
+        providerState.bIsDynamicMFGSupported != sl::eTrue)
+    {
+        unlockedMax = 3;
+    }
+
+    return unlockedMax;
 }
 
 
@@ -1122,10 +1148,10 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
         // The unlock state is only latched where the patch actually lands (module load), never
         // here: flipping it on mere flow observation made the menu's save-and-restart prompt
         // vanish a frame after the user toggled the option.
-        if (IsNativeDlssgFlow())
+        if (IsNativeGameDlssgFlow())
             MfgUnlock::TryApply();
 
-        const bool unlockPending = IsNativeDlssgFlow() && MfgUnlock::Pending();
+        const bool unlockPending = IsNativeGameDlssgFlow() && MfgUnlock::Pending();
 
         // Populate dlssgMfgMax once
         if (!state.dlssgMfgMax.has_value() && !unlockPending)
@@ -1134,7 +1160,7 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
             sl::DLSSGOptions localOptions {};
             if (o_slDLSSGGetState(viewport, localState, &localOptions) == sl::Result::eOk)
             {
-                if (auto unlockedMax = GetEffectiveDlssgUnlockedMax(); unlockedMax > localState.numFramesToGenerateMax)
+                if (auto unlockedMax = GetSafeDlssgMax(localState); unlockedMax > localState.numFramesToGenerateMax)
                     localState.numFramesToGenerateMax = unlockedMax;
 
                 if (localState.numFramesToGenerateMax > 0 && localState.numFramesToGenerateMax < 6)
@@ -1157,7 +1183,12 @@ sl::Result StreamlineHooks::hkslDLSSGSetOptions(const sl::ViewportHandle& viewpo
         {
             auto overrideCount = Config::Instance()->FGDLSSGOverrideInterpolationCount.value();
             if (overrideCount != 0)
-                newOptions.numFramesToGenerate = overrideCount;
+            {
+                auto maxFrames = GetEffectiveDlssgUnlockedMax();
+                if (state.dlssgMfgMax.has_value())
+                    maxFrames = std::min(maxFrames, static_cast<uint32_t>(state.dlssgMfgMax.value()));
+                newOptions.numFramesToGenerate = std::min(overrideCount, static_cast<int>(maxFrames));
+            }
             else if (!enableDynamicMode)
                 newOptions.mode = sl::DLSSGMode::eOff;
         }
@@ -1195,7 +1226,7 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
     if (o_slDLSSGGetState == nullptr)
         return sl::Result::eErrorFeatureNotSupported;
 
-    if (IsNativeDlssgFlow())
+    if (IsNativeGameDlssgFlow())
         MfgUnlock::TryApply();
 
     sl::Result result {};
@@ -1223,7 +1254,7 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
             state.bReserved4 = newState.bReserved4;
             state.bIsVsyncSupportAvailable = newState.bIsVsyncSupportAvailable;
 
-            if (auto unlockedMax = GetEffectiveDlssgUnlockedMax(); unlockedMax > state.numFramesToGenerateMax)
+            if (auto unlockedMax = GetSafeDlssgMax(newState); unlockedMax > state.numFramesToGenerateMax)
                 state.numFramesToGenerateMax = unlockedMax;
         }
 
@@ -1243,7 +1274,7 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
             return result;
         State::Instance().dlssgGameDMFGSupported = state.bIsDynamicMFGSupported == sl::eTrue;
 
-        if (auto unlockedMax = GetEffectiveDlssgUnlockedMax(); unlockedMax > state.numFramesToGenerateMax)
+        if (auto unlockedMax = GetSafeDlssgMax(state); unlockedMax > state.numFramesToGenerateMax)
             state.numFramesToGenerateMax = unlockedMax;
     }
 
@@ -1271,7 +1302,7 @@ sl::Result StreamlineHooks::hkslDLSSGGetState(const sl::ViewportHandle& viewport
         sl::DLSSGOptions localOptions {};
         if (o_slDLSSGGetState(viewport, localState, &localOptions) == sl::Result::eOk)
         {
-            if (auto unlockedMax = GetEffectiveDlssgUnlockedMax(); unlockedMax > localState.numFramesToGenerateMax)
+            if (auto unlockedMax = GetSafeDlssgMax(localState); unlockedMax > localState.numFramesToGenerateMax)
                 localState.numFramesToGenerateMax = unlockedMax;
 
             if (localState.numFramesToGenerateMax > 0 && localState.numFramesToGenerateMax < 6)
@@ -2400,7 +2431,8 @@ bool StreamlineHooks::registerNativeDlssgModule(HMODULE module)
 
 bool StreamlineHooks::isNativeDlssgAvailable()
 {
-    return IsNativeGameDlssg() && (isDlssgHooked() || o_slDLSSGSetOptions != nullptr);
+    const bool providerAvailable = IsNativeGameDlssg() || IsAmpereMfgFlow();
+    return providerAvailable && (isDlssgHooked() || o_slDLSSGSetOptions != nullptr);
 }
 
 bool StreamlineHooks::isNativeDlssgActive()

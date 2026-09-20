@@ -17,11 +17,26 @@ struct TestOption
 {
     bool enabled = false;
     bool value_or_default() const { return enabled; }
+    bool value_or(bool fallback) const { return enabled || fallback; }
+    void set_volatile_value(bool value) { enabled = value; }
+};
+struct TestIntOption
+{
+    int value = 0;
+    int value_or_default() const { return value; }
 };
 struct Config
 {
     TestOption FGDLSSGAdaMfgUnlock;
+    TestOption FGDLSSGUnlockAdaMFG;
+    TestOption FGDLSSGAdaBlackwellKernels;
+    TestIntOption FGDLSSGBoundaryMitigation;
     static Config* Instance() { static Config config; return &config; }
+};
+struct State
+{
+    HMODULE nativeDlssgModule = nullptr;
+    static State& Instance() { static State state; return state; }
 };
 enum class VendorId { Nvidia, Other };
 constexpr unsigned NV_GPU_ARCHITECTURE_AD100 = 0x190;

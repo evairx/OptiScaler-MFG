@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $out = Join-Path $repo 'x64/rtx40-mfg-validation'
 New-Item -ItemType Directory -Force "$out/seams/misc", "$out/seams/proxies" | Out-Null
-foreach ($header in @('pch.h', 'SysUtils.h', 'Config.h', 'Util.h', 'misc/IdentifyGpu.h', 'proxies/KernelBase_Proxy.h')) {
+foreach ($header in @('pch.h', 'SysUtils.h', 'Config.h', 'State.h', 'Util.h', 'misc/IdentifyGpu.h', 'proxies/KernelBase_Proxy.h')) {
     Set-Content -LiteralPath "$out/seams/$header" -Value '// Supplied by Mocks.h; patching and scanning are production code.'
 }
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'

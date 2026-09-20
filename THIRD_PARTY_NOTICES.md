@@ -46,3 +46,17 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## sdli1995 0.3.5 SM75/SM86 proxy
+
+`OptiScaler/dlssg_sm86/version.dll` is the optional hash-pinned proxy from
+`sdli1995/dlssg_for_sm86`, tag `0.3.5`, commit
+`9621db573e07ed54f50c15bbb585ed9a7bdfac28`.
+SHA-256:
+
+`c3934a09399f022504227c72df0bf8c0de55f9a08880dddde898c5262cefa838`
+
+It is loaded only when `[DLSSG] AmpereNative6XRuntime` is enabled and the
+Ampere/Turing MFG unlock is active. The binary is distributed unchanged as an
+upstream proxy; its upstream notices remain applicable. NVIDIA runtime/model
+assets are separate third-party material and are not relicensed by OptiScaler.
