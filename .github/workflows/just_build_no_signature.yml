@@ -8,9 +8,9 @@ name: Build (No Signing)
 on:
   workflow_dispatch:
   push:
-    branches: [ "dev7" ]
+    branches: [ "dev8" ]
   pull_request:
-    branches: [ "main", "dev7" ]
+    branches: [ "main", "dev8" ]
     
 env:
   # Path to the solution file relative to the root of the project.
@@ -68,9 +68,9 @@ jobs:
         $buildVersion = Get-Version-Component 'VER_BUILD_NUMBER' '#define VER_BUILD_NUMBER\s+'
         
         # Merge into a single version string
-        if ($env:GITHUB_REF_NAME -eq 'dev7') {
-            $version = "dev_7"
-            $releaseName = "OptiScaler-MFG dev_7"
+        if ($env:GITHUB_REF_NAME -eq 'dev8') {
+            $version = "dev_8"
+            $releaseName = "OptiScaler-MFG dev_8"
         } else {
             $version = "v10.0.2-pre3"
             $releaseName = "OptiScaler-MFG v10.0.2-pre3"
@@ -128,6 +128,8 @@ jobs:
       
     - name: Compress the artifact 
       run: |
+        Copy-Item "${{ github.workspace }}\OptiScaler\dlssg_sm86\version.dll" "${{ github.workspace }}\x64\Release\a\version.dll" -Force
+        Copy-Item "${{ github.workspace }}\OptiScaler\dlssg_sm86\dlssg_sm86.ini" "${{ github.workspace }}\x64\Release\a\dlssg_sm86.ini" -Force
         $zipName = "${{ steps.get_version.outputs.filename }}.7z"
         7z a -r ${{ github.workspace }}\$zipName ${{ github.workspace }}\x64\Release\a\*.*
 
@@ -150,6 +152,7 @@ jobs:
         draft: false
         prerelease: true
         make_latest: false
+        target_commitish: ${{ github.sha }}
         files: ${{ github.workspace }}/${{ steps.get_version.outputs.filename }}.7z
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -192,4 +192,4 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the MFG compatibility a
 ## License
 Licensed under the **GNU General Public License v3.0**, same as upstream OptiScaler. See [LICENSE](LICENSE).
 
-This is an unofficial fork: modifications are documented by this repository's history and in [NOTICE.md](NOTICE.md). Third-party components (including the GPLv3-derived `dlssg_sm86` runtime and the MIT-licensed MFGAdaUnlock-RenoDx work) are covered in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+This is an unofficial fork: modifications are documented by this repository's history and in [NOTICE.md](NOTICE.md). Third-party components (including the sdli1995 SM75/SM86 proxy and the MIT-licensed MFGAdaUnlock-RenoDx work) are covered in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

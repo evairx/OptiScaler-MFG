@@ -1,15 +1,19 @@
-# OptiScaler-MFG dev_7
+# OptiScaler-MFG dev_8
 
 Pre-release. CI builds Windows x64 only; see Validation below for the author's GPU smoke test.
+
+## RTX 30 / 20 runtime correction
+- RTX 20/30 MFG now uses the hash-pinned `sdli1995/dlssg_for_sm86` 0.3.5 `version.dll` as the primary game-side provider.
+- The obsolete native `dlssg_sm86.dll` backend and its X5/X6 patch path were removed.
+- OptiScaler no longer captures the game's `nvngx_dlssg.dll` load when the sdli1995 proxy is active.
+- The release package places sdli1995 `version.dll` and `dlssg_sm86.ini` beside the game executable. Use `OptiScaler.dll` as `winmm.dll`, `dxgi.dll`, or another supported OptiScaler proxy name.
 
 ## NVIDIA DLSS MFG unlock, native (RTX 40 / Ada)
 - Blackwell (sm_120) kernels retargeted to Ada (sm_89), giving the game's own DLSS-G native multi-frame generation up to 6X.
 - Transactional DLSSG 310.7/310.9 gates with rollback, temporal midpoint PTX correction, boundary artifact mitigation (modes 0/1/2, default balanced) and a silhouette guard.
 
 ## RTX 30 / 20 (Ampere / Turing)
-- Hash-pinned SM86 X5/X6 loader with the tested X4 fallback path.
-- Built-in SM75/SM86 runtime is included and ready without a separate installation; the RTX 20/30 MFG unlocker remains opt-in to avoid unexpected game crashes. The game-side plugin is capped safely when it only supports 4X.
-- Optional sdli1995 0.3.5 runtime support remains available through `[DLSSG] AmpereNative6XRuntime`.
+- sdli1995 0.3.5 is the primary RTX 20/30 runtime. The game-side plugin is capped safely when it only supports 4X.
 
 ## Intel XeFG MFG
 - Native 2X-6X unlock (five byte patches plus pacing per generated frame): `[XeFG] UnlockMFG`, `MaxInterpolatedFrames`, `ExtraPacing`.
@@ -31,7 +35,7 @@ Pre-release. CI builds Windows x64 only; see Validation below for the author's G
 - Native DLSS MFG section shown only when FG Input and FG Output are `None`; FG selectors locked while the unlocker is active; correct save-and-restart prompt; `Enable DLSS MFG Unlocker` checkbox; noisy status messages removed.
 
 ## Versioning
-- Builds identify as `OptiScaler-MFG dev_N` (tag `dev_7`, asset `OptiScaler-MFG_dev_7_<date>.7z`).
+- Builds identify as `OptiScaler-MFG dev_N` (tag `dev_8`, asset `OptiScaler-MFG_dev_8_<date>.7z`).
 
 ## Validation
 - CI build: Windows x64. Author GPU smoke test: Onimusha: Way of the Sword (RE Engine) with REFramework - native RTX 40 MFG and XeFG OK, NR OK.

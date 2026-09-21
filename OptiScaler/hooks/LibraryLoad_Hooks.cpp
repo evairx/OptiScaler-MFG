@@ -33,11 +33,14 @@
 
 #include <fsr4/FSR4ModelSelection.h>
 #include <fsr4/FSR4Upgrade.h>
+#include <framegen/dlssg/AmpereMfgLoader.h>
 #include <framegen/dlssg/MfgUnlock.h>
 #include <misc/IdentifyGpu.h>
 #include <low_latency/input/input_uell.h>
 
 // #define LOG_LIB_OPERATIONS
+
+static thread_local bool sdliDlssgPassThrough = false;
 
 HMODULE LibraryLoadHooks::LoadLibraryCheckA(std::string libName, LPCSTR lpLibFullPath)
 {
@@ -58,6 +61,33 @@ HMODULE LibraryLoadHooks::LoadLibraryCheckW(std::wstring libName, LPCWSTR lpLibF
     auto path = std::filesystem::path(libName).lexically_normal();
     auto normalizedPath = path.wstring();
     to_lower_in_place(normalizedPath);
+
+    const auto ampereStatus = AmpereMfgLoader::LastStatus();
+    const bool sdliOwnsDlssg = normalizedPath.ends_with(L"nvngx_dlssg.dll") &&
+                               Config::Instance()->FGDLSSGAmpereNative6XRuntime.value_or_default() &&
+                               ampereStatus.Native6XActive;
+
+    // sdli1995 is the primary game-side proxy in dev8. Let its own LdrLoadDll hook select the
+    // bundled runtime instead of returning OptiScaler.dll or redirecting to a second provider.
+    if (sdliOwnsDlssg && sdliDlssgPassThrough)
+        return nullptr;
+
+    if (sdliOwnsDlssg && KernelBaseProxy::LoadLibraryExW_() != nullptr)
+    {
+        sdliDlssgPassThrough = true;
+        const auto requestedPath = lpLibFullPath != nullptr ? lpLibFullPath : libName.c_str();
+        auto module = KernelBaseProxy::LoadLibraryExW_()(requestedPath, nullptr, 0);
+        sdliDlssgPassThrough = false;
+
+        if (module != nullptr)
+        {
+            StreamlineHooks::registerNativeDlssgModule(module);
+            LOG_INFO("sdli1995 owns native DLSS-G load: {}", libNameA);
+            return module;
+        }
+
+        LOG_WARN("sdli1995 did not return a DLSS-G module for {}; continuing with the normal loader", libNameA);
+    }
 
     std::filesystem::path localSlPath(Config::Instance()->MainDllPath.value());
     localSlPath = localSlPath / L"streamline"; // Hardcoded streamline folder

@@ -992,7 +992,7 @@ static bool IsNativeGameDlssg()
 
     // The game's DLSS-G may have been redirected to OptiScaler's own modern
     // nvngx_dlssg.dll. That copy is still the provider the game uses, so it
-    // counts; only the SM86 sidecar and NVIDIA's OTA/model caches are excluded.
+    // counts; only the obsolete SM86 sidecar and NVIDIA's OTA/model caches are excluded.
     if (lower.contains(L"\\dlssg_sm86\\") || lower.contains(L"/dlssg_sm86/") ||
         lower.ends_with(L"\\dlssg_sm86.dll") || lower.ends_with(L"/dlssg_sm86.dll"))
         return false;
@@ -1015,7 +1015,7 @@ static bool IsAmpereMfgFlow()
     const bool enabled = Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default() ||
                          state.activeUnlockAmpereMFG;
 
-    return state.activeFgOutput == FGOutput::NoFG && enabled && status.DllLoaded;
+    return state.activeFgOutput == FGOutput::NoFG && enabled && status.Native6XActive;
 }
 
 static bool IsNativeDlssgPath(const std::wstring& modulePath)
@@ -1038,7 +1038,7 @@ static bool IsNativeDlssgPath(const std::wstring& modulePath)
 static bool IsNativeDlssgFlow()
 {
     // The FG Input selection does not decide this: both the game's provider and the
-    // verified SM75/SM86 sidecar use the native DLSS-G presentation path.
+    // verified sdli1995 proxy use the native DLSS-G presentation path.
     return IsNativeGameDlssgFlow() || IsAmpereMfgFlow();
 }
 
@@ -1055,7 +1055,7 @@ static uint32_t GetEffectiveDlssgUnlockedMax()
     }
 
     if (Config::Instance()->FGDLSSGAmpereMfgUnlock.value_or_default() ||
-        State::Instance().activeUnlockAmpereMFG || AmpereMfgLoader::LastStatus().DllLoaded)
+        State::Instance().activeUnlockAmpereMFG || AmpereMfgLoader::LastStatus().Native6XActive)
     {
         return static_cast<uint32_t>(AmpereMfgLoader::MaxInterpolationCount());
     }

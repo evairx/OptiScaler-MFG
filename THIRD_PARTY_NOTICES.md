@@ -1,23 +1,17 @@
 # Third-party notices
 
-## dlssg_sm86 runtime (RTX 20/30 MFG)
+## sdli1995 version.dll (RTX 20/30 MFG)
 
-The `OptiScaler/dlssg_sm86/dlssg_sm86.dll` runtime distributed with this fork is
-derived from the GPLv3 `dlssg-to-fsr3` / Coldwood1026 SM75/SM86 work. See
-`OptiScaler/dlssg_sm86/THIRD_PARTY_NOTICES.txt` for the upstream references and
-pinned commits.
+`version.dll` is the unchanged hash-pinned proxy from
+`sdli1995/dlssg_for_sm86`, tag `0.3.5`, commit
+`9621db573e07ed54f50c15bbb585ed9a7bdfac28`.
 
-This fork distributes a binary built from that GPLv3-derived code. Requests for
-the Corresponding Source of the build made by this fork (the native host and
-the modifications applied to it) can be opened at this repository's issue
-tracker:
+SHA-256:
+`c3934a09399f022504227c72df0bf8c0de55f9a08880dddde898c5262cefa838`
 
-https://github.com/evairx/OptiScaler-MFG/issues
-
-The runtime embeds model and kernel assets extracted from NVIDIA's
-`nvngx_dlssg.dll` (reference: version 310.1.0.0). Those NVIDIA assets are
-separate third-party material from this user's local installation; they are
-not relicensed by this project or by the GPL.
+It must be installed beside the game's rendering executable and is the only
+RTX 20/30 MFG provider distributed by dev8. Its upstream notices and NVIDIA
+asset restrictions remain applicable.
 
 ## MFGAdaUnlock-RenoDx
 
@@ -46,17 +40,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-## sdli1995 0.3.5 SM75/SM86 proxy
-
-`OptiScaler/dlssg_sm86/version.dll` is the optional hash-pinned proxy from
-`sdli1995/dlssg_for_sm86`, tag `0.3.5`, commit
-`9621db573e07ed54f50c15bbb585ed9a7bdfac28`.
-SHA-256:
-
-`c3934a09399f022504227c72df0bf8c0de55f9a08880dddde898c5262cefa838`
-
-It is loaded only when `[DLSSG] AmpereNative6XRuntime` is enabled and the
-Ampere/Turing MFG unlock is active. The binary is distributed unchanged as an
-upstream proxy; its upstream notices remain applicable. NVIDIA runtime/model
-assets are separate third-party material and are not relicensed by OptiScaler.

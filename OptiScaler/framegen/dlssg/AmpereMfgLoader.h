@@ -8,147 +8,68 @@ namespace AmpereMfgLoader
 {
 struct Status
 {
-    bool Enabled = false;     // Config says to use it
-    bool DllFound = false;    // A compatible SM75/SM86 runtime was found
-    bool IniWritten = false;  // dlssg_sm86.ini generated and written
-    bool DllLoaded = false;   // LoadLibrary succeeded
-    bool ExperimentalRequested = false; // 5X/6X asked for in the config
-    bool ExperimentalPatched = false;   // hash-pinned loader patched and loaded
-    bool ExperimentalFallback = false;  // 5X/6X unavailable; proven 4X path kept
-    std::string ExperimentalDetail;     // why the experimental patch applied or failed
-    bool Native6XRequested = false;     // Config opted into the sdli1995 0.3.x runtime
-    bool Native6XRuntimeFound = false;  // A hash-pinned 0.3.x binary is in the game or sidecar folder
-    bool Native6XActive = false;        // That runtime loaded successfully and is used as-is
-    std::string Native6XDetail;         // Version/ceiling detail for logs, menu and reports
-    int MaxInterpolationCount = 1;      // Verified runtime ceiling: 1=2X, 3=4X, 5=6X
-    std::string ErrorMessage; // Human-readable error if anything failed
+    bool Enabled = false;
+    bool DllFound = false;          // Pinned sdli1995 version.dll found beside the game executable
+    bool IniWritten = false;        // sdli1995 dlssg_sm86.ini written beside the game executable
+    bool DllLoaded = false;         // The pinned proxy is loaded from the game executable folder
+    bool ExperimentalRequested = false;
+    bool ExperimentalPatched = false;
+    bool ExperimentalFallback = false;
+    std::string ExperimentalDetail;
+    bool Native6XRequested = false;
+    bool Native6XRuntimeFound = false;
+    bool Native6XActive = false;
+    std::string Native6XDetail;
+    int MaxInterpolationCount = 1; // 1=2X, 3=4X, 5=6X
+    std::string ErrorMessage;
 };
 
 Status LastStatus();
-
-/// Returns the verified interpolation ceiling of the loaded SM75/SM86 backend.
 int MaxInterpolationCount();
-
-/// Called after DLL initialization, once GPU/environment information is available.
 void TrySetup();
-
-/// Writes dlssg_sm86.ini to all target locations (beside DLL, game root, OptiScaler dir).
 void WriteIniFiles();
 
-/// Formats dlssg_sm86.ini content with Native 0.2.4 specification and strict clamping.
-inline std::string FormatIniContent(int maxFrames, const std::string& kernelImg, int hwBilinear = 0, const std::string& router = "SM86", int logLevel = 1)
-{
-    // Native 0.2.4 accepts 1, 2 or 3. The experimental 5X/6X loaders are hash-pinned builds
-    // whose parser bound was raised, so 4 and 5 are written only for those patched copies.
-    if (maxFrames <= 0 || maxFrames > 5)
-        maxFrames = 3;
-
-    std::string validKernel = kernelImg;
-    if (validKernel != "PTX" && validKernel != "Cubin")
-        validKernel = "PTX";
-
-    std::string validRouter = router;
-    if (validRouter != "SM75" && validRouter != "SM86")
-        validRouter = "SM86";
-
-    int validHwBilinear = (hwBilinear == 1) ? 1 : 0;
-    int validLogLevel = (logLevel >= 0 && logLevel <= 3) ? logLevel : 1;
-
-    std::ostringstream ss;
-    ss << "; Native 0.2.4. Restart the game after changing this file.\n";
-    ss << "[Compatibility]\n";
-    ss << "Router=" << validRouter << "\n";
-    ss << "KernelImage=" << validKernel << "\n";
-    ss << "HardwareBilinear=" << validHwBilinear << "\n\n";
-    ss << "[FrameGeneration]\n";
-    ss << "MaxGeneratedFrames=" << maxFrames << "\n\n";
-    ss << "[Logging]\n";
-    ss << "Level=" << validLogLevel << "\n";
-
-    return ss.str();
-}
-
-/// Formats dlssg_sm86.ini for the sdli1995 0.3.x proxy runtime. The 0.3.x loader derives its
-/// ceiling from [FrameGeneration] MaxGeneratedFrames (3 = 4X; 5 = 6X on the 310.9 build).
-/// The runtime is used exactly as shipped: this INI is the only thing written for it.
 inline std::string FormatNativeIniContent(int maxFrames, const std::string& router = "SM86", int logLevel = 1)
 {
-    if (maxFrames != 3 && maxFrames != 5)
-        maxFrames = 3;
+    if (maxFrames < 1 || maxFrames > 5)
+        maxFrames = 5;
 
-    std::string validRouter = router;
-    if (validRouter != "SM75" && validRouter != "SM86")
-        validRouter = "SM86";
-
-    int validLogLevel = (logLevel >= 0 && logLevel <= 3) ? logLevel : 1;
+    const std::string validRouter = (router == "SM75" || router == "SM86") ? router : "SM86";
+    const int validLogLevel = (logLevel >= 0 && logLevel <= 3) ? logLevel : 1;
 
     std::ostringstream ss;
-    ss << "; sdli1995 0.3.x native runtime. Restart the game after changing this file.\n";
-    ss << "[General]\n";
-    ss << "Enabled=1\n\n";
-    ss << "[FrameGeneration]\n";
-    ss << "Optimized=1\n";
-    ss << "MaxGeneratedFrames=" << maxFrames << "\n\n";
-    ss << "[Compatibility]\n";
-    ss << "Router=" << validRouter << "\n\n";
-    ss << "[Logging]\n";
-    ss << "Level=" << validLogLevel << "\n";
-    ss << "Directory=dlssg_sm86\\logs\n\n";
-    ss << "[Runtime]\n";
-    ss << "Mode=Bundled\n";
-    ss << "CacheDirectory=\n";
-
+    ss << "; sdli1995 0.3.5 native runtime. Restart the game after changing this file.\n";
+    ss << "[General]\nEnabled=1\n\n";
+    ss << "[FrameGeneration]\nOptimized=1\nMaxGeneratedFrames=" << maxFrames << "\n\n";
+    ss << "[Compatibility]\nRouter=" << validRouter << "\n\n";
+    ss << "[Logging]\nLevel=" << validLogLevel << "\nDirectory=dlssg_sm86\\logs\n\n";
+    ss << "[Runtime]\nMode=Bundled\nCacheDirectory=\n";
     return ss.str();
 }
 
-/// Checks if an architecture ID represents Turing (SM75).
 inline bool IsTuringArch(uint32_t archId)
 {
     return (archId == 0x00000160) || ((archId & 0xFFF0) == 0x0160);
 }
 
-/// Checks if an architecture ID represents Ampere (SM86).
 inline bool IsAmpereArch(uint32_t archId)
 {
     return (archId == 0x00000170) || ((archId & 0xFFF0) == 0x0170);
 }
 
-/// Resolves router string ("SM75" or "SM86") based on architecture ID and GPU name.
 inline std::string ResolveRouter(uint32_t archId, const std::string& gpuName = "")
 {
     if (IsTuringArch(archId))
         return "SM75";
     if (IsAmpereArch(archId))
         return "SM86";
-
-    // Fallback: name matching
-    if (!gpuName.empty())
-    {
-        if (gpuName.find("RTX 20") != std::string::npos ||
-            gpuName.find("GTX 16") != std::string::npos ||
-            gpuName.find("Turing") != std::string::npos)
-            return "SM75";
-
-        if (gpuName.find("RTX 30") != std::string::npos ||
-            gpuName.find("Ampere") != std::string::npos)
-            return "SM86";
-    }
-
+    if (gpuName.find("RTX 20") != std::string::npos || gpuName.find("GTX 16") != std::string::npos ||
+        gpuName.find("Turing") != std::string::npos)
+        return "SM75";
     return "SM86";
 }
 
-/// Resolves router string ("SM75" or "SM86") for current hardware.
 std::string ResolveRouter();
-
-/// Generates dlssg_sm86.ini content from OptiScaler config values.
 std::string GenerateIniContent();
-
-/// Resolves optimal kernel image format for current hardware/environment when Auto is requested.
 std::string ResolveAutoKernelImage();
-
-inline std::string ResolveAutoKernelImage(uint32_t archId, const std::string& name, bool onLinux)
-{
-    // PTX uses driver JIT compilation and guarantees exact SM matching and stability across all Ampere/Turing models
-    return "PTX";
-}
 } // namespace AmpereMfgLoader

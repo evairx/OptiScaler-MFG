@@ -148,11 +148,11 @@ REM Prompt user to select a filename for OptiScaler
 :selectFilename
 echo.
 echo Choose a filename for OptiScaler (default is dxgi.dll, most compatible):
-echo (For Vulkan, use winmm.dll. For XGP/MS Store, winmm/version.dll may be better)
+echo (For Vulkan, use winmm.dll. Keep the sdli1995 version.dll for RTX 20/30 MFG)
 echo.
 echo  [1] dxgi.dll
 echo  [2] winmm.dll
-echo  [3] version.dll
+echo  [3] version.dll ^(do not select in dev8; this is sdli1995^)
 echo  [4] dbghelp.dll
 echo  [5] d3d12.dll
 echo  [6] wininet.dll

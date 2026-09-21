@@ -3439,7 +3439,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                 }
                 state.fgSettingsChanged = true;
             }
-            ShowHelpMarker("Native NVIDIA Streamline MFG unlocker. The built-in RTX 20/30 backend is included but opt-in;\n"
+            ShowHelpMarker("Native NVIDIA Streamline MFG unlocker. RTX 20/30 uses the sdli1995 proxy;\n"
                            "enable it and restart the game before using MFG. Ada remains opt-in.\n"
                            "Only available with the game's own DLSS-G (FG Output: None).\n"
                            "While enabled, autonomous generation (OptiFG / XeSS MFG / FSR FG) stays disabled to avoid conflicts.\n"
@@ -3621,37 +3621,21 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                     }
                     ShowHelpMarker("Prevents flickering and ghosting in 3X/4X multi-frame modes by filtering incompatible HUD separation tags");
 
-                    bool hwBilinear = config->FGDLSSGAmpereMfgHardwareBilinear.value_or_default();
-                    if (ImGui::Checkbox("Hardware Bilinear (SM86 Fast Sampling)", &hwBilinear))
-                    {
-                        config->FGDLSSGAmpereMfgHardwareBilinear = hwBilinear;
-                        AmpereMfgLoader::WriteIniFiles();
-                    }
-                    ShowHelpMarker("Enables fast approximate hardware sampling on SM86 (RTX 30) for improved frametimes. Uncheck for exact output.");
-
                     if (isAmpere || isTuring)
                     {
-                        bool native6x = config->FGDLSSGAmpereNative6XRuntime.value_or_default();
-                        if (ImGui::Checkbox("Optional: use sdli1995 0.3.x runtime", &native6x))
-                        {
-                            config->FGDLSSGAmpereNative6XRuntime = native6x;
-                            AmpereMfgLoader::WriteIniFiles();
-                            state.fgSettingsChanged = true;
-                        }
-                        ShowHelpMarker("The built-in SM75/SM86 runtime is used by default and is included in the package.\n"
-                                       "Optionally place a hash-verified sdli1995 0.3.x runtime in the game folder or\n"
-                                       "OptiScaler/dlssg_sm86 (version.dll, dlssg_sm86.dll or dlssg_native_031.dll).\n"
-                                       "0.3.5 is preferred when multiple versions are present; otherwise the built-in\n"
-                                       "runtime and its verified X5/X6 patch path remain active.");
+                        ImGui::TextDisabled("sdli1995 0.3.5 is the primary RTX 20/30 MFG runtime");
+                        ShowHelpMarker("dev8 uses the hash-pinned sdli1995 version.dll beside the game executable.\n"
+                                       "OptiScaler must use another proxy name such as winmm.dll or dxgi.dll.\n"
+                                       "Do not replace the sdli1995 version.dll with OptiScaler.dll.");
 
                         const auto ampereStatus = AmpereMfgLoader::LastStatus();
                         if (ampereStatus.Native6XActive && ampereStatus.DllLoaded)
                             ImGui::TextDisabled("sdli1995 %s loaded; verified ceiling: %dX", ampereStatus.Native6XDetail.c_str(),
                                                 ampereStatus.MaxInterpolationCount + 1);
                         else if (ampereStatus.Native6XRuntimeFound)
-                            ImGui::TextDisabled("sdli1995 runtime detected but could not be loaded; using the legacy fallback if available.");
-                        else if (native6x)
-                            ImGui::TextDisabled("sdli1995 runtime not detected; using the legacy fallback if available.");
+                            ImGui::TextDisabled("sdli1995 version.dll detected; restart the game if it is not loaded yet.");
+                        else
+                            ImGui::TextDisabled("sdli1995 version.dll not detected beside the game executable.");
                     }
                 }
 
