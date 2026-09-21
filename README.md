@@ -38,6 +38,10 @@ See [installation](INSTALL-DLSSNR.md), [controls](docs/NR-PIPELINE-UI.md),
 and [credits](docs/CREDITS.md). Official download links refer to upstream OptiScaler;
 these experimental features are proposed separately.
 
+Community wishes for this branch — reusing NR surfaces across DX12 format changes, an FSR-based
+multi-frame output and Smooth Motion for the SM86/SM75 sidecar — are written up in
+[Feature Requests](FeatureRequests.md).
+
 ## About
 
 **OptiScaler** is a tool that lets you replace upscalers in games that ***already support DLSS2+ / FSR2+ / XeSS*** ($`^1`$), as well as manage ***frame generation*** in already mentioned games _(either by replacing existing FG options or enabling it in DX12 games through experimental ***OptiFG***)_. It also offers extensive customization options for all users, including those with Nvidia GPUs using DLSS.

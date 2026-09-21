@@ -64,3 +64,14 @@ As mentioned above, spoofing an Nvidia card can cause games to use special codep
 
 * And crashes, especially when raytracing is enabled.
 
+
+## Neural Rendering stutter on cutscene camera cuts
+
+With NR and **Generate model before upscale** enabled, Unreal Engine games that reset NR history on
+every camera cut (FINAL FANTASY VII REBIRTH cutscenes are the reported case) hitch once per cut.
+The observed colour format flips between two values, and each flip drops and reallocates the NR
+DX12 surfaces, so the work is paid twice and the second transition returns to a format that was
+just released.
+
+DLSS Unlocked fixed the same symptom by caching the surfaces across format transitions; see
+[Feature Requests](FeatureRequests.md#1-reuse-nr-surfaces-across-dx12-format-changes-cutscene-stutter-in-final-fantasy-vii-rebirth).
